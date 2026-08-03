@@ -24,13 +24,13 @@ type NetIP struct {
 // object uses dynamic keys (cpu, memory, hdd0, net0, ...) so it is decoded as a
 // raw map and accessed via the typed helpers below.
 type VMInfo struct {
-	ID        string `json:"ID"`
-	Name      string `json:"Name"`
-	State     string `json:"State"`
-	OS        string `json:"OS"`
-	Template  string `json:"Template"`
-	Uptime    string `json:"Uptime"`
-	HomePath  string `json:"Home path"`
+	ID         string `json:"ID"`
+	Name       string `json:"Name"`
+	State      string `json:"State"`
+	OS         string `json:"OS"`
+	Template   string `json:"Template"`
+	Uptime     string `json:"Uptime"`
+	HomePath   string `json:"Home path"`
 	GuestTools struct {
 		State   string `json:"state"`
 		Version string `json:"version"`
@@ -161,7 +161,7 @@ type ServerInfo struct {
 	Version  string `json:"Version"`
 	VMHome   string `json:"VM home"`
 	License  struct {
-		State     string `json:"state"`
+		State      string `json:"state"`
 		Restricted string `json:"restricted"`
 	} `json:"License"`
 }
@@ -169,17 +169,17 @@ type ServerInfo struct {
 // HostStats holds macOS host statistics parsed from system_profiler /
 // vm_stat / df / sysctl. Fields that could not be parsed are left zero/empty.
 type HostStats struct {
-	Chip            string
-	PhysicalCores   int
-	LogicalCores    int
-	MemoryTotalGB   float64
-	MemoryFreeGB    float64
-	DiskUsedGB      float64
-	DiskTotalGB     float64
-	LoadAvg1        float64
-	LoadAvg5        float64
-	LoadAvg15       float64
-	UptimeDays      float64
+	Chip          string
+	PhysicalCores int
+	LogicalCores  int
+	MemoryTotalGB float64
+	MemoryFreeGB  float64
+	DiskUsedGB    float64
+	DiskTotalGB   float64
+	LoadAvg1      float64
+	LoadAvg5      float64
+	LoadAvg15     float64
+	UptimeDays    float64
 }
 
 // parseMegabytes turns Parallels size strings ("6144Mb", "auto") into an int MB,

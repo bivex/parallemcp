@@ -11,6 +11,9 @@
 # Test binary, built with `go test -c`
 *.test
 
+# This project's built binary
+/parallemcp
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
