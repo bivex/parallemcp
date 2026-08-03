@@ -60,10 +60,7 @@ func (c *Client) ExecOS(ctx context.Context, id, command, os string) (*ExecResul
 // other OS uses /bin/sh -lc verbatim.
 func guestShellArgs(os, command string) []string {
 	if isWindowsOS(os) {
-		return []string{
-			"powershell.exe", "-NoProfile", "-NonInteractive",
-			"-EncodedCommand", encodePowerShell(command),
-		}
+		return []string{"cmd.exe", "/c", command}
 	}
 	return []string{"/bin/sh", "-lc", command}
 }
