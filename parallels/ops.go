@@ -2,11 +2,13 @@ package parallels
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 )
 
 // ExecResult is the captured result of a command run inside a guest VM.
@@ -16,12 +18,26 @@ type ExecResult struct {
 	ExitCode int
 }
 
-// Exec runs command inside a running VM via `prlctl exec`. The command is a shell
-// string executed with `/bin/sh -lc`, so pipes, redirection and `&&` work. The
-// guest command's non-zero exit code is surfaced in ExitCode (not as an error);
-// only a failure to execute at all (e.g. Parallels Tools not running) is an error.
+// Exec runs command inside a running VM, choosing the guest shell by OS:
+// Linux/macOS use `/bin/sh -lc`; Windows uses
+// `powershell.exe -NoProfile -NonInteractive -EncodedCommand <base64>` (see
+// guestShellArgs). The guest command's non-zero exit code is surfaced in
+// ExitCode (not as an error); only a failure to execute at all (e.g. Parallels
+// Tools not running) is an error.
+//
+// The OS is "" here, which defaults to the Unix shell. Callers that already know
+// the guest OS (e.g. after a lookup) should use ExecOS to avoid a detection
+// round-trip.
 func (c *Client) Exec(ctx context.Context, id, command string) (*ExecResult, error) {
-	r, err := c.exec(ctx, Prlctl, "exec", id, "/bin/sh", "-lc", command)
+	return c.ExecOS(ctx, id, command, "")
+}
+
+// ExecOS is like Exec but takes the guest OS so the right shell is selected
+// without an extra lookup. The OS string is the one reported by `prlctl list -i`
+// (e.g. "win-11", "linux", "macos").
+func (c *Client) ExecOS(ctx context.Context, id, command, os string) (*ExecResult, error) {
+	args := append([]string{"exec", id}, guestShellArgs(os, command)...)
+	r, err := c.exec(ctx, Prlctl, args...)
 	res := &ExecResult{Stdout: r.Stdout, Stderr: r.Stderr, ExitCode: r.ExitCode}
 	if err == nil {
 		return res, nil
@@ -35,6 +51,40 @@ func (c *Client) Exec(ctx context.Context, id, command string) (*ExecResult, err
 	// Otherwise: the guest command itself exited non-zero. Return its output with
 	// the exit code, and no Go-level error so the caller can present stdout/stderr.
 	return res, nil
+}
+
+// guestShellArgs returns the shell+args to run command in a guest of the given
+// OS. Windows guests run PowerShell via -EncodedCommand: the command is UTF-16LE
+// then base64, which sidesteps all quoting/escaping and handles newlines,
+// Unicode, and shell metacharacters reliably (good for large scripts). Every
+// other OS uses /bin/sh -lc verbatim.
+func guestShellArgs(os, command string) []string {
+	if isWindowsOS(os) {
+		return []string{
+			"powershell.exe", "-NoProfile", "-NonInteractive",
+			"-EncodedCommand", encodePowerShell(command),
+		}
+	}
+	return []string{"/bin/sh", "-lc", command}
+}
+
+// isWindowsOS reports whether os denotes a Windows guest (Parallels reports
+// values like "win-11", "win-10").
+func isWindowsOS(os string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(os)), "win")
+}
+
+// encodePowerShell encodes s as UTF-16LE and base64, the form expected by
+// PowerShell's -EncodedCommand. Newlines, quotes, $, |, >, backticks, and
+// non-ASCII all survive intact.
+func encodePowerShell(s string) string {
+	u16 := utf16.Encode([]rune(s))
+	buf := make([]byte, len(u16)*2)
+	for i, v := range u16 {
+		buf[2*i] = byte(v)
+		buf[2*i+1] = byte(v >> 8)
+	}
+	return base64.StdEncoding.EncodeToString(buf)
 }
 
 // looksLikeExecFailure reports whether stderr indicates prlctl could not run the

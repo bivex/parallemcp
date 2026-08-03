@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,29 +11,49 @@ import (
 	"parallemcp/parallels"
 )
 
-// execFakeRunner is a fake parallels.Runner that ignores the command line and
-// returns a canned result/error, so the vm_exec handler can be tested without a
-// Parallels install.
+// execFakeRunner is a fake parallels.Runner. It answers `prlctl list -i` with a
+// minimal VMInfo carrying infoOS (so the handler's OS detection works) and routes
+// everything else to the canned result/error, capturing the full argument vector.
 type execFakeRunner struct {
-	res *parallels.CmdResult
-	err error
-	got string // command actually passed to Exec (last arg)
-	vm  string
+	res    *parallels.CmdResult
+	err    error
+	infoOS string // OS reported by `prlctl list -i`
+	args   []string
+	vm     string
 }
 
-func (f *execFakeRunner) Run(_ context.Context, _ string, args ...string) (*parallels.CmdResult, error) {
-	if len(args) >= 2 {
-		f.vm = args[1]
+func (f *execFakeRunner) Run(_ context.Context, _ string, a ...string) (*parallels.CmdResult, error) {
+	if len(a) > 0 && a[0] == "list" {
+		js := fmt.Sprintf(`[{"ID":"x","OS":%q,"State":"running"}]`, f.infoOS)
+		return &parallels.CmdResult{Stdout: js}, nil
 	}
-	if len(args) >= 5 {
-		f.got = args[4]
+	f.args = append([]string(nil), a...)
+	if len(a) >= 2 {
+		f.vm = a[1]
 	}
 	return f.res, f.err
 }
 
 func newExecTools(res *parallels.CmdResult, err error) (*Tools, *execFakeRunner) {
-	r := &execFakeRunner{res: res, err: err}
+	return newExecToolsOS(res, err, "")
+}
+
+func newExecToolsOS(res *parallels.CmdResult, err error, infoOS string) (*Tools, *execFakeRunner) {
+	r := &execFakeRunner{res: res, err: err, infoOS: infoOS}
 	return &Tools{cli: &parallels.Client{Run: r}}, r
+}
+
+// decodeUTF16LE reverses the PowerShell -EncodedCommand encoding for assertions.
+func decodeUTF16LE(b64 string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "", err
+	}
+	runes := make([]rune, len(raw)/2)
+	for i := 0; i*2+1 < len(raw); i++ {
+		runes[i] = rune(raw[2*i]) | rune(raw[2*i+1])<<8
+	}
+	return string(runes), nil
 }
 
 func textOf(t *testing.T, res *mcp.CallToolResult) string {
@@ -82,8 +104,8 @@ func TestVMExecSuccessRenderer(t *testing.T) {
 			t.Errorf("rendered output missing %q:\n%s", want, md)
 		}
 	}
-	if run.vm != "Ubuntu" || run.got != "echo hello" {
-		t.Errorf("command not forwarded correctly: vm=%q cmd=%q", run.vm, run.got)
+	if run.vm != "Ubuntu" || run.args[len(run.args)-1] != "echo hello" {
+		t.Errorf("command not forwarded correctly: vm=%q args=%v", run.vm, run.args)
 	}
 }
 
@@ -144,16 +166,54 @@ func TestVMExecPropagatesExecError(t *testing.T) {
 	}
 }
 
+// TestVMExecDetectsWindowsAndEncodes verifies the handler detects a Windows
+// guest and routes the command through powershell -EncodedCommand: the script
+// is passed as a single base64 (UTF-16LE) argument, untouched by shell quoting.
+func TestVMExecDetectsWindowsAndEncodes(t *testing.T) {
+	script := "Get-ChildItem C:\\ | Where-Object { $_.PSIsContainer }"
+	tools, run := newExecToolsOS(&parallels.CmdResult{ExitCode: 0, Stdout: "Dir\n"}, nil, "win-11")
+
+	res, _, _ := tools.vmExec(context.Background(), &mcp.CallToolRequest{}, vmExecInput{
+		VM: "Windows 11", Command: script,
+	})
+	if res.IsError {
+		t.Fatalf("unexpected error: %s", textOf(t, res))
+	}
+	a := run.args
+	if len(a) != 7 {
+		t.Fatalf("arg count = %d, want 7: %v", len(a), a)
+	}
+	if a[0] != "exec" || a[1] != "Windows 11" || a[2] != "powershell.exe" {
+		t.Errorf("unexpected prefix: %v", a)
+	}
+	if a[3] != "-NoProfile" || a[4] != "-NonInteractive" || a[5] != "-EncodedCommand" {
+		t.Errorf("unexpected powershell flags: %v", a[3:6])
+	}
+	dec, err := decodeUTF16LE(a[6])
+	if err != nil {
+		t.Fatalf("decode encoded command: %v", err)
+	}
+	if dec != script {
+		t.Errorf("encoded command mismatch:\n got  %q\n want %q", dec, script)
+	}
+	if !strings.Contains(textOf(t, res), "Dir") {
+		t.Errorf("stdout not rendered: %s", textOf(t, res))
+	}
+}
+
+// TestVMExecWindowsCommandForwardedVerbatim checks the client-side guarantee for
+// the legacy Windows string form (no OS detected): the command reaches the guest
+// shell verbatim, never mangled by the wrapper.
 func TestVMExecWindowsCommandForwardedVerbatim(t *testing.T) {
-	tools, run := newExecTools(&parallels.CmdResult{ExitCode: 0}, nil)
 	cmd := `cmd /c "echo %USERNAME% & dir C:\Users\Admin"`
+	tools, run := newExecTools(&parallels.CmdResult{ExitCode: 0}, nil)
 	res, _, _ := tools.vmExec(context.Background(), &mcp.CallToolRequest{}, vmExecInput{
 		VM: "Windows 11", Command: cmd,
 	})
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", textOf(t, res))
 	}
-	if run.got != cmd {
-		t.Errorf("Windows command mangled:\n got  %q\n want %q", run.got, cmd)
+	if run.args[len(run.args)-1] != cmd {
+		t.Errorf("Windows command mangled:\n got  %q\n want %q", run.args[len(run.args)-1], cmd)
 	}
 }

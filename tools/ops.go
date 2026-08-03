@@ -37,7 +37,11 @@ func (t *Tools) vmExec(ctx context.Context, req *mcp.CallToolRequest, in vmExecI
 	if in.VM == "" || strings.TrimSpace(in.Command) == "" {
 		return errResult("`vm` and `command` are required"), noOut{}, nil
 	}
-	r, err := t.cli.Exec(ctx, in.VM, in.Command)
+	// Pick the right guest shell: Windows runs PowerShell via -EncodedCommand,
+	// everything else uses /bin/sh -lc. OS detection is best-effort; on failure
+	// (or unknown OS) we fall back to the Unix shell.
+	os := t.guestOS(ctx, in.VM)
+	r, err := t.cli.ExecOS(ctx, in.VM, in.Command, os)
 	if err != nil {
 		return fail("exec command", err), noOut{}, nil
 	}
@@ -53,6 +57,17 @@ func (t *Tools) vmExec(ctx context.Context, req *mcp.CallToolRequest, in vmExecI
 		b.WriteString("_(no output)_\n")
 	}
 	return textResult(b.String()), noOut{}, nil
+}
+
+// guestOS returns the guest OS for vm (best-effort) so vm_exec can pick the
+// right shell. On any error (unknown VM, prlctl hiccup) it returns "" which the
+// client treats as the Unix default.
+func (t *Tools) guestOS(ctx context.Context, vm string) string {
+	info, err := t.cli.Info(ctx, vm)
+	if err != nil {
+		return ""
+	}
+	return info.OS
 }
 
 type vmConfigureInput struct {

@@ -2,6 +2,7 @@ package parallels
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 )
@@ -9,6 +10,22 @@ import (
 // keyFor returns the stub key used by stubRunner for a prlctl exec call.
 func execKey(id, command string) string {
 	return "prlctl exec " + id + " /bin/sh -lc " + command
+}
+
+// decodePowerShell reverses encodePowerShell for assertions: base64 → UTF-16LE → string.
+func decodePowerShell(b64 string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "", err
+	}
+	if len(raw)%2 != 0 {
+		return "", errors.New("odd length")
+	}
+	runes := make([]rune, len(raw)/2)
+	for i := 0; i < len(raw)/2; i++ {
+		runes[i] = rune(raw[2*i]) | rune(raw[2*i+1])<<8
+	}
+	return string(runes), nil
 }
 
 func TestExecSuccess(t *testing.T) {
@@ -211,5 +228,94 @@ func TestLooksLikeExecFailure(t *testing.T) {
 		if got := looksLikeExecFailure(tc.in); got != tc.want {
 			t.Errorf("looksLikeExecFailure(%q) = %v, want %v", tc.in, got, tc.want)
 		}
+	}
+}
+
+// TestGuestShellArgs locks in the OS→shell mapping used by ExecOS.
+func TestGuestShellArgs(t *testing.T) {
+	// Windows → PowerShell -EncodedCommand with the base64 payload.
+	ws := guestShellArgs("win-11", "Get-Process")
+	if len(ws) != 5 || ws[0] != "powershell.exe" || ws[1] != "-NoProfile" ||
+		ws[2] != "-NonInteractive" || ws[3] != "-EncodedCommand" {
+		t.Fatalf("windows shell args wrong: %v", ws)
+	}
+	if dec, err := decodePowerShell(ws[4]); err != nil || dec != "Get-Process" {
+		t.Fatalf("decoded payload = %q (err %v), want %q", dec, err, "Get-Process")
+	}
+
+	// Unknown / empty OS falls back to the Unix shell. Note detection is
+	// case-insensitive, so "WIN-10" above is already treated as Windows.
+	for _, os := range []string{"", "linux", "macos", "other"} {
+		us := guestShellArgs(os, "echo hi")
+		if len(us) != 3 || us[0] != "/bin/sh" || us[1] != "-lc" || us[2] != "echo hi" {
+			t.Errorf("OS %q: expected /bin/sh -lc, got %v", os, us)
+		}
+	}
+}
+
+// TestEncodePowerShellRoundTrip verifies the UTF-16LE+base64 encoding survives
+// newlines, quotes, $, |, >, backticks and non-ASCII — i.e. nothing needs
+// manual escaping when sent via -EncodedCommand.
+func TestEncodePowerShellRoundTrip(t *testing.T) {
+	scripts := []string{
+		"Get-ChildItem C:\\ -Recurse | Where-Object { $_.Length -gt 1MB } | Select Name, Length",
+		"Write-Host \"hello `$world`\"\nGet-Date\n$ErrorActionPreference = 'Stop'",
+		"echo 'café — 日本語' ; cat C:\\Temp\\log.txt",
+	}
+	for _, s := range scripts {
+		enc := encodePowerShell(s)
+		dec, err := decodePowerShell(enc)
+		if err != nil {
+			t.Fatalf("decode %q: %v", s, err)
+		}
+		if dec != s {
+			t.Errorf("round-trip mismatch:\n got  %q\n want %q", dec, s)
+		}
+	}
+}
+
+// TestExecOSLinuxDefault confirms the legacy Exec (empty OS) still uses /bin/sh.
+func TestExecOSLinuxDefault(t *testing.T) {
+	c := &Client{Run: newStub(map[string]string{
+		execKey("vm", "echo hi"): "hi\n",
+	})}
+	r, err := c.ExecOS(context.Background(), "vm", "echo hi", "")
+	if err != nil {
+		t.Fatalf("ExecOS: %v", err)
+	}
+	if r.Stdout != "hi\n" {
+		t.Errorf("Stdout = %q, want %q", r.Stdout, "hi\n")
+	}
+}
+
+// TestExecOSWindowsUsesEncodedPowerShell checks the full Windows path: the
+// command is passed as a single -EncodedCommand argument (no shell quoting on
+// the prlctl side) and decodes back to the exact script.
+func TestExecOSWindowsUsesEncodedPowerShell(t *testing.T) {
+	var gotArgs []string
+	c := &Client{Run: &captureRunner{on: func(_ string, args []string) {
+		gotArgs = append([]string(nil), args...)
+	}}}
+
+	script := "Get-ChildItem C:\\ | Where-Object { $_.PSIsContainer }"
+	if _, err := c.ExecOS(context.Background(), "win-vm", script, "win-11"); err != nil {
+		t.Fatalf("ExecOS: %v", err)
+	}
+	// prlctl exec win-vm powershell.exe -NoProfile -NonInteractive -EncodedCommand <b64>.
+	if len(gotArgs) != 7 {
+		t.Fatalf("arg count = %d, want 7: %v", len(gotArgs), gotArgs)
+	}
+	if gotArgs[0] != "exec" || gotArgs[1] != "win-vm" || gotArgs[2] != "powershell.exe" {
+		t.Errorf("unexpected prefix: %v", gotArgs)
+	}
+	if gotArgs[3] != "-NoProfile" || gotArgs[4] != "-NonInteractive" || gotArgs[5] != "-EncodedCommand" {
+		t.Errorf("unexpected powershell flags: %v", gotArgs[3:6])
+	}
+	dec, err := decodePowerShell(gotArgs[6])
+	if err != nil {
+		t.Fatalf("decode encoded command: %v", err)
+	}
+	if dec != script {
+		t.Errorf("encoded command mismatch:\n got  %q\n want %q", dec, script)
 	}
 }
