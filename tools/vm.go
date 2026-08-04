@@ -90,6 +90,8 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "## %s\n\n", info.Name)
+
+	// — Core —
 	fmt.Fprintf(&b, "- **state**: %s\n", info.State)
 	fmt.Fprintf(&b, "- **os**: %s\n", info.OS)
 	fmt.Fprintf(&b, "- **uuid**: `%s`\n", info.ID)
@@ -99,39 +101,124 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 	if info.Uptime != "" {
 		fmt.Fprintf(&b, "- **uptime**: %ss\n", info.Uptime)
 	}
+
+	// — Platform / Firmware —
+	if info.BIOSType != "" || info.EFISecureBoot != "" || info.Optimization.HypervisorType != "" {
+		b.WriteString("\n### Platform\n\n")
+		if info.BIOSType != "" {
+			fmt.Fprintf(&b, "- **bios**: %s\n", info.BIOSType)
+		}
+		if info.EFISecureBoot != "" {
+			fmt.Fprintf(&b, "- **efi secure boot**: %s\n", info.EFISecureBoot)
+		}
+		if info.Optimization.HypervisorType != "" {
+			fmt.Fprintf(&b, "- **hypervisor**: %s\n", info.Optimization.HypervisorType)
+		}
+		if info.Optimization.FasterVM != "" {
+			fmt.Fprintf(&b, "- **faster vm**: %s\n", info.Optimization.FasterVM)
+		}
+		if info.Optimization.NestedVirt != "" {
+			fmt.Fprintf(&b, "- **nested virt**: %s\n", info.Optimization.NestedVirt)
+		}
+		if info.BootOrder != "" {
+			fmt.Fprintf(&b, "- **boot order**: `%s`\n", info.BootOrder)
+		}
+	}
+
+	// — Security —
+	if info.Security.TPMEnabled != "" {
+		b.WriteString("\n### Security\n\n")
+		fmt.Fprintf(&b, "- **tpm**: %s", info.Security.TPMEnabled)
+		if info.Security.TPMType != "" {
+			fmt.Fprintf(&b, " (%s)", info.Security.TPMType)
+		}
+		b.WriteString("\n")
+		if info.Security.Encrypted != "" {
+			fmt.Fprintf(&b, "- **encrypted**: %s\n", info.Security.Encrypted)
+		}
+	}
+
+	// — Guest Tools —
 	if info.GuestTools.State != "" {
-		fmt.Fprintf(&b, "- **guest tools**: %s", info.GuestTools.State)
+		b.WriteString("\n### Guest Tools\n\n")
+		fmt.Fprintf(&b, "- **state**: %s", info.GuestTools.State)
 		if info.GuestTools.Version != "" {
 			fmt.Fprintf(&b, " (%s)", info.GuestTools.Version)
 		}
 		b.WriteString("\n")
 	}
+
+	// — CPU / Memory —
+	b.WriteString("\n### Hardware\n\n")
 	fmt.Fprintf(&b, "- **cpu**: %d vCPU\n", info.CPUs())
 	if mb := info.MemoryMB(); mb > 0 {
 		fmt.Fprintf(&b, "- **memory**: %d MB (%.1f GB)\n", mb, float64(mb)/1024)
 	}
+	if info.USBBluetooth.USB30 != "" {
+		fmt.Fprintf(&b, "- **usb 3.0**: %s\n", info.USBBluetooth.USB30)
+	}
 
+	// — Video —
+	if vid := info.Video(); vid != nil {
+		fmt.Fprintf(&b, "\n### Video\n\n")
+		fmt.Fprintf(&b, "| adapter | 3d-accel | high-res | auto-mem |\n|---|---|---|---|\n")
+		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
+			or(vid.AdapterType, "—"),
+			or(vid.ThreeDAccel, "—"),
+			or(vid.HighResolution, "—"),
+			or(vid.AutoMem, "—"),
+		)
+	}
+
+	// — Disks —
 	if disks := info.Disks(); len(disks) > 0 {
-		b.WriteString("\n### Disks\n\n| type | size | enabled | image |\n|---|---|---|---|\n")
+		b.WriteString("\n### Disks\n\n| type | size | compact | enabled | image |\n|---|---|---|---|---|\n")
 		for _, d := range disks {
-			fmt.Fprintf(&b, "| %s | %s | %v | `%s` |\n", or(d.Type, "—"), or(d.Size, "—"), d.Enabled, shortPath(d.Image))
+			fmt.Fprintf(&b, "| %s | %s | %s | %v | `%s` |\n",
+				or(d.Type, "—"), or(d.Size, "—"),
+				or(d.OnlineCompact, "—"),
+				d.Enabled, shortPath(d.Image))
 		}
 	}
+
+	// — Network —
 	if nets := info.Nets(); len(nets) > 0 {
-		b.WriteString("\n### Network\n\n| type | card | iface | mac | enabled |\n|---|---|---|---|---|\n")
-		for _, n := range nets {
-			fmt.Fprintf(&b, "| %s | %s | %s | `%s` | %v |\n",
-				or(n.Type, "—"), or(n.Card, "—"), or(n.Iface, "—"), n.MAC, n.Enabled)
+		b.WriteString("\n### Network\n\n| # | type | card | iface | mac | enabled |\n|---|---|---|---|---|---|\n")
+		for i, n := range nets {
+			fmt.Fprintf(&b, "| net%d | %s | %s | %s | `%s` | %v |\n",
+				i,
+				or(n.Type, "—"), or(n.Card, "—"), or(n.Iface, "—"),
+				n.MAC, n.Enabled)
 		}
 	}
+
+	// — Guest IPs —
 	if ips := info.IPv4s(); len(ips) > 0 {
 		b.WriteString("\n### Guest IPv4 addresses\n\n")
 		for _, ip := range ips {
 			fmt.Fprintf(&b, "- `%s`\n", ip)
 		}
 	}
+
+	// — Startup & Shutdown —
+	if info.StartupShutdown.Autostart != "" {
+		b.WriteString("\n### Startup & Shutdown\n\n")
+		fmt.Fprintf(&b, "- **autostart**: %s\n", info.StartupShutdown.Autostart)
+		fmt.Fprintf(&b, "- **autostop**: %s\n", info.StartupShutdown.Autostop)
+	}
+
+	// — Host Shared Folders —
+	if sfs := info.SharedFolders(); len(sfs) > 0 {
+		b.WriteString("\n### Host Shared Folders\n\n| name | path | mode | enabled |\n|---|---|---|---|\n")
+		for _, sf := range sfs {
+			fmt.Fprintf(&b, "| %s | `%s` | %s | %v |\n", sf.Name, sf.Path, or(sf.Mode, "—"), sf.Enabled)
+		}
+	}
+
 	return textResult(b.String()), noOut{}, nil
 }
+
+
 
 type vmStartInput struct {
 	VM string `json:"vm" jsonschema:"VM name or UUID"`

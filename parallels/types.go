@@ -21,23 +21,47 @@ type NetIP struct {
 	IP   string `json:"ip"`
 }
 
-// VMInfo models the relevant fields of `prlctl list -i <vm> --json`. The Hardware
-// object uses dynamic keys (cpu, memory, hdd0, net0, ...) so it is decoded as a
-// raw map and accessed via the typed helpers below.
+// VMInfo models the relevant fields of `prlctl list -i <vm> --json`.
 type VMInfo struct {
-	ID         string `json:"ID"`
-	Name       string `json:"Name"`
-	State      string `json:"State"`
-	OS         string `json:"OS"`
-	Template   string `json:"Template"`
-	Uptime     string `json:"Uptime"`
-	HomePath   string `json:"Home path"`
-	GuestTools struct {
+	ID           string `json:"ID"`
+	Name         string `json:"Name"`
+	State        string `json:"State"`
+	OS           string `json:"OS"`
+	Template     string `json:"Template"`
+	Uptime       string `json:"Uptime"`
+	HomePath     string `json:"Home path"`
+	BootOrder    string `json:"Boot order"`
+	BIOSType     string `json:"BIOS type"`
+	EFISecureBoot string `json:"EFI Secure boot"`
+	GuestTools   struct {
 		State   string `json:"state"`
 		Version string `json:"version"`
 	} `json:"GuestTools"`
-	Hardware map[string]json.RawMessage `json:"Hardware"`
-	Network  struct {
+	Security struct {
+		Encrypted  string `json:"Encrypted"`
+		TPMEnabled string `json:"TPM enabled"`
+		TPMType    string `json:"TPM type"`
+		Protected  string `json:"Protected"`
+	} `json:"Security"`
+	Optimization struct {
+		FasterVM         string `json:"Faster virtual machine"`
+		HypervisorType   string `json:"Hypervisor type"`
+		NestedVirt       string `json:"Nested virtualization"`
+		LongerBattery    string `json:"Longer battery life"`
+	} `json:"Optimization"`
+	StartupShutdown struct {
+		Autostart string `json:"Autostart"`
+		Autostop  string `json:"Autostop"`
+	} `json:"Startup and Shutdown"`
+	USBBluetooth struct {
+		USB30 string `json:"Support USB 3.0"`
+	} `json:"USB and Bluetooth"`
+	SharedFolderSettings struct {
+		Enabled   bool   `json:"enabled"`
+		Automount string `json:"Automount"`
+	} `json:"Guest Shared Folders"`
+	Hardware             map[string]json.RawMessage `json:"Hardware"`
+	Network              struct {
 		IPAddresses []NetIP `json:"ipAddresses"`
 	} `json:"Network"`
 	HostSharedFoldersRaw map[string]json.RawMessage `json:"Host Shared Folders"`
@@ -55,10 +79,11 @@ type hwMem struct {
 
 // HwDisk is one hdd* entry within Hardware.
 type HwDisk struct {
-	Enabled bool   `json:"enabled"`
-	Image   string `json:"image"`
-	Type    string `json:"type"`
-	Size    string `json:"size"` // e.g. "262144Mb"
+	Enabled       bool   `json:"enabled"`
+	Image         string `json:"image"`
+	Type          string `json:"type"`
+	Size          string `json:"size"` // e.g. "262144Mb"
+	OnlineCompact string `json:"online-compact"` // "on" | "off"
 }
 
 // HwNet is one net* entry within Hardware.
@@ -68,6 +93,28 @@ type HwNet struct {
 	MAC     string `json:"mac"`
 	Card    string `json:"card"`
 	Iface   string `json:"iface"` // bridged: host interface
+}
+
+// HwVideo is the video entry within Hardware.
+type HwVideo struct {
+	AdapterType    string `json:"adapter-type"`
+	Size           string `json:"size"`
+	ThreeDAccel    string `json:"3d-acceleration"`
+	HighResolution string `json:"high-resolution"`
+	AutoMem        string `json:"automatic-video-memory"`
+}
+
+// Video returns the video adapter settings, or nil if not found.
+func (v *VMInfo) Video() *HwVideo {
+	raw, ok := v.Hardware["video"]
+	if !ok {
+		return nil
+	}
+	var vid HwVideo
+	if err := json.Unmarshal(raw, &vid); err != nil {
+		return nil
+	}
+	return &vid
 }
 
 // CPUs returns the configured vCPU count, or 0 if unavailable.
