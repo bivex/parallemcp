@@ -14,9 +14,9 @@ func (c *Client) Capture(ctx context.Context, id, filePath string) error {
 	return c.ok(ctx, Prlctl, "capture", id, "-f", filePath)
 }
 
-// Compact shrinks vmID's virtual disk files to reclaim host disk space.
+// Compact enables online disk compacting for vmID's virtual disk files.
 func (c *Client) Compact(ctx context.Context, id string) error {
-	return c.ok(ctx, Prlctl, "set", id, "--compact-disk")
+	return c.ok(ctx, Prlctl, "set", id, "--online-compact", "on")
 }
 
 // CDROMParams configures VM CD/DVD drive actions.
