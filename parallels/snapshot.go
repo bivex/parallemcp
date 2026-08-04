@@ -71,3 +71,11 @@ func (c *Client) SnapshotRestore(ctx context.Context, vmID, snapID, snapName str
 	}
 	return c.ok(ctx, Prlctl, "snapshot-switch", vmID, "-i", id)
 }
+
+// SnapshotDelete deletes a snapshot identified by snapID or snapName.
+func (c *Client) SnapshotDelete(ctx context.Context, vmID, snapID string) error {
+	if strings.TrimSpace(snapID) == "" {
+		return fmt.Errorf("snapshot id or name is required")
+	}
+	return c.ok(ctx, Prlctl, "snapshot-delete", vmID, "-i", snapID)
+}

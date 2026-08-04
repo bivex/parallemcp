@@ -68,6 +68,7 @@ claude mcp add parallemcp -- /absolute/path/to/parallemcp
 | `vm_snapshot_create` | Named snapshot, optional description |
 | `vm_snapshot_list` | List snapshots for a VM |
 | `vm_snapshot_restore` | Revert to a snapshot by `id` or `name` |
+| `vm_snapshot_delete` | Delete a snapshot by `id` |
 
 **Provisioning**
 | Tool | Description |
@@ -75,6 +76,7 @@ claude mcp add parallemcp -- /absolute/path/to/parallemcp
 | `vm_create` | New VM from a Parallels ostemplate (default Debian) |
 | `vm_clone` | Linked or full clone |
 | `vm_delete` | Delete VM + disks (`confirm:true` required) |
+| `vm_bundle` | Register or unregister .pvm VM bundles |
 | `template_list` | Registered templates + base-image tokens |
 
 **Operations**
@@ -85,7 +87,13 @@ claude mcp add parallemcp -- /absolute/path/to/parallemcp
 | `vm_shared_folders` | Manage host shared folders (list, add, remove) |
 | `vm_file_copy` | Transfer files between host and guest VM (push/pull) |
 | `vm_network` | Manage VM network adapters (list, set type/iface/status) |
-| `vm_smb` | Manage Windows SMB shares and mapped network drives (list, share, mount, unmount) |
+| `vm_smb` | Manage Windows SMB shares and mapped network drives |
+| `vm_screenshot` | Capture a PNG screenshot of a VM's display |
+| `vm_compact` | Compact virtual disk (.hdd) to reclaim host disk space |
+| `vm_cdrom` | Attach, connect, disconnect, or detach ISO images |
+| `vm_disk_manage` | Add a new virtual hard disk or resize existing disk |
+| `vm_install_tools` | Mount Parallels Guest Tools installer ISO |
+| `vm_device` | Add or remove hardware devices (net, serial, sound) |
 | `server_info` | Parallels version, license, host info |
 | `host_stats` | macOS host CPU, memory, disk, load, uptime |
 

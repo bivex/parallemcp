@@ -52,6 +52,7 @@ func Register(s *mcp.Server) {
 	t.registerFileCopy(s)
 	t.registerNetwork(s)
 	t.registerSMB(s)
+	t.registerExtraTools(s)
 }
 
 func ipDisp(s string) string {
