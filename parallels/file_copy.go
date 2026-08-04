@@ -56,22 +56,68 @@ func (c *Client) FileCopy(ctx context.Context, vmID string, p FileCopyParams) er
 }
 
 func (c *Client) writeGuestFile(ctx context.Context, vmID, guestOS, guestPath, b64 string) error {
-	var cmd string
+	dir := filepath.Dir(guestPath)
+	chunkSize := 4000
+
 	if isWindowsOS(guestOS) {
-		dir := filepath.Dir(guestPath)
-		cmd = fmt.Sprintf(`$dir = '%s'; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }; [System.IO.File]::WriteAllBytes('%s', [System.Convert]::FromBase64String('%s'))`, dir, guestPath, b64)
+		tmpB64 := guestPath + ".tmp.b64"
+		setupCmd := fmt.Sprintf(`$dir = '%s'; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }; Remove-Item -Path '%s' -ErrorAction SilentlyContinue`, dir, tmpB64)
+		if _, err := c.ExecOS(ctx, vmID, setupCmd, guestOS); err != nil {
+			return err
+		}
+
+		for i := 0; i < len(b64); i += chunkSize {
+			end := i + chunkSize
+			if end > len(b64) {
+				end = len(b64)
+			}
+			chunk := b64[i:end]
+			appendCmd := fmt.Sprintf(`[System.IO.File]::AppendAllText('%s', '%s')`, tmpB64, chunk)
+			res, err := c.ExecOS(ctx, vmID, appendCmd, guestOS)
+			if err != nil || res.ExitCode != 0 {
+				return fmt.Errorf("append chunk failed: %v", err)
+			}
+		}
+
+		decodeCmd := fmt.Sprintf(`$b64 = [System.IO.File]::ReadAllText('%s'); [System.IO.File]::WriteAllBytes('%s', [System.Convert]::FromBase64String($b64)); Remove-Item -Path '%s' -ErrorAction SilentlyContinue`, tmpB64, guestPath, tmpB64)
+		res, err := c.ExecOS(ctx, vmID, decodeCmd, guestOS)
+		if err != nil {
+			return err
+		}
+		if res.ExitCode != 0 {
+			return fmt.Errorf("decode file failed (exit %d): %s", res.ExitCode, res.Stderr)
+		}
+		return nil
 	} else {
-		dir := filepath.Dir(guestPath)
-		cmd = fmt.Sprintf(`mkdir -p '%s' && echo '%s' | base64 -d > '%s'`, dir, b64, guestPath)
+		tmpB64 := guestPath + ".tmp.b64"
+		setupCmd := fmt.Sprintf(`mkdir -p '%s' && rm -f '%s'`, dir, tmpB64)
+		if _, err := c.ExecOS(ctx, vmID, setupCmd, guestOS); err != nil {
+			return err
+		}
+
+		for i := 0; i < len(b64); i += chunkSize {
+			end := i + chunkSize
+			if end > len(b64) {
+				end = len(b64)
+			}
+			chunk := b64[i:end]
+			appendCmd := fmt.Sprintf(`printf '%%s' '%s' >> '%s'`, chunk, tmpB64)
+			res, err := c.ExecOS(ctx, vmID, appendCmd, guestOS)
+			if err != nil || res.ExitCode != 0 {
+				return fmt.Errorf("append chunk failed: %v", err)
+			}
+		}
+
+		decodeCmd := fmt.Sprintf(`base64 -d '%s' > '%s' && rm -f '%s'`, tmpB64, guestPath, tmpB64)
+		res, err := c.ExecOS(ctx, vmID, decodeCmd, guestOS)
+		if err != nil {
+			return err
+		}
+		if res.ExitCode != 0 {
+			return fmt.Errorf("decode file failed (exit %d): %s", res.ExitCode, res.Stderr)
+		}
+		return nil
 	}
-	res, err := c.ExecOS(ctx, vmID, cmd, guestOS)
-	if err != nil {
-		return err
-	}
-	if res.ExitCode != 0 {
-		return fmt.Errorf("write guest file failed (exit %d): %s", res.ExitCode, res.Stderr)
-	}
-	return nil
 }
 
 func (c *Client) readGuestFile(ctx context.Context, vmID, guestOS, guestPath string) (string, error) {
