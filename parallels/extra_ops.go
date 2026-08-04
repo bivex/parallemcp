@@ -90,10 +90,15 @@ type DeviceManageParams struct {
 func (c *Client) DeviceManage(ctx context.Context, id string, p DeviceManageParams) error {
 	switch strings.ToLower(p.Action) {
 	case "add", "create":
-		if strings.TrimSpace(p.DeviceType) == "" {
+		devType := strings.ToLower(strings.TrimSpace(p.DeviceType))
+		if devType == "" {
 			return errors.New("device_type is required (e.g. 'net', 'serial', 'sound')")
 		}
-		return c.ok(ctx, Prlctl, "set", id, "--device-add", p.DeviceType)
+		args := []string{"set", id, "--device-add", devType}
+		if devType == "net" {
+			args = append(args, "--type", "shared")
+		}
+		return c.ok(ctx, Prlctl, args...)
 	case "remove", "delete", "del":
 		if strings.TrimSpace(p.DeviceName) == "" {
 			return errors.New("device_name is required for remove (e.g. 'net1', 'serial0')")
