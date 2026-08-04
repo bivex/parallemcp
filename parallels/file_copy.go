@@ -56,10 +56,10 @@ func (c *Client) FileCopy(ctx context.Context, vmID string, p FileCopyParams) er
 }
 
 func (c *Client) writeGuestFile(ctx context.Context, vmID, guestOS, guestPath, b64 string) error {
-	dir := filepath.Dir(guestPath)
 	chunkSize := 4000
 
 	if isWindowsOS(guestOS) {
+		dir := guestDir(guestPath, true)
 		tmpB64 := guestPath + ".tmp.b64"
 		setupCmd := fmt.Sprintf(`$dir = '%s'; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }; Remove-Item -Path '%s' -ErrorAction SilentlyContinue`, dir, tmpB64)
 		if _, err := c.ExecOS(ctx, vmID, setupCmd, guestOS); err != nil {
@@ -89,6 +89,7 @@ func (c *Client) writeGuestFile(ctx context.Context, vmID, guestOS, guestPath, b
 		}
 		return nil
 	} else {
+		dir := guestDir(guestPath, false)
 		tmpB64 := guestPath + ".tmp.b64"
 		setupCmd := fmt.Sprintf(`mkdir -p '%s' && rm -f '%s'`, dir, tmpB64)
 		if _, err := c.ExecOS(ctx, vmID, setupCmd, guestOS); err != nil {
@@ -118,6 +119,18 @@ func (c *Client) writeGuestFile(ctx context.Context, vmID, guestOS, guestPath, b
 		}
 		return nil
 	}
+}
+
+func guestDir(path string, isWin bool) string {
+	if isWin {
+		p := strings.ReplaceAll(path, "/", "\\")
+		idx := strings.LastIndex(p, "\\")
+		if idx > 0 {
+			return p[:idx]
+		}
+		return p
+	}
+	return filepath.Dir(path)
 }
 
 func (c *Client) readGuestFile(ctx context.Context, vmID, guestOS, guestPath string) (string, error) {
