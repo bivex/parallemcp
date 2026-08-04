@@ -196,9 +196,14 @@ func (c *Client) Clone(ctx context.Context, source, name string, linked bool) er
 	return c.ok(ctx, Prlctl, args...)
 }
 
-// Delete removes a VM and its disk files. Callers MUST gate this behind an
-// explicit confirmation; this method performs no confirmation of its own.
+// Delete removes vmID and its disk files. If the VM is currently running or paused,
+// it is automatically stopped first. Requires explicit confirmation at the tool layer.
 func (c *Client) Delete(ctx context.Context, id string) error {
+	if entry, err := c.Find(ctx, id); err == nil {
+		if entry.Status == "running" || entry.Status == "paused" {
+			_ = c.Stop(ctx, id, true)
+		}
+	}
 	return c.ok(ctx, Prlctl, "delete", id)
 }
 

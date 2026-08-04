@@ -81,12 +81,17 @@ func (c *Client) Start(ctx context.Context, id string) error {
 }
 
 // Stop shuts a VM down. With force it kills the process immediately (--kill).
+// If graceful stop fails (e.g. ACPI shutdown times out on bare VM shell), it falls back to --kill.
 func (c *Client) Stop(ctx context.Context, id string, force bool) error {
 	args := []string{"stop", id}
 	if force {
 		args = append(args, "--kill")
 	}
-	return c.ok(ctx, Prlctl, args...)
+	err := c.ok(ctx, Prlctl, args...)
+	if err != nil && !force {
+		return c.ok(ctx, Prlctl, "stop", id, "--kill")
+	}
+	return err
 }
 
 // Restart reboots a running VM.
