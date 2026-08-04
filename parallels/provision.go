@@ -85,8 +85,19 @@ func (c *Client) Create(ctx context.Context, p CreateParams) (*CreateResult, err
 	res := &CreateResult{Name: p.Name}
 
 	// 1. Create the VM shell from the ostemplate.
-	if _, err := c.exec(ctx, Prlctl, "create", p.Name, "-o", ostype, "-d", dist); err != nil {
-		return res, err
+	createArgs := []string{"create", p.Name}
+	if p.OSType != "" {
+		createArgs = append(createArgs, "-o", p.OSType)
+	}
+	if p.Distribution != "" {
+		createArgs = append(createArgs, "-d", p.Distribution)
+	}
+
+	if _, err := c.exec(ctx, Prlctl, createArgs...); err != nil {
+		// Fallback: if ostype/distribution flags fail on this host OS/arch, create basic VM shell
+		if _, fallbackErr := c.exec(ctx, Prlctl, "create", p.Name); fallbackErr != nil {
+			return res, err
+		}
 	}
 	res.Created = true
 
