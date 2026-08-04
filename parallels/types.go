@@ -23,47 +23,83 @@ type NetIP struct {
 
 // VMInfo models the relevant fields of `prlctl list -i <vm> --json`.
 type VMInfo struct {
-	ID           string `json:"ID"`
-	Name         string `json:"Name"`
-	State        string `json:"State"`
-	OS           string `json:"OS"`
-	Template     string `json:"Template"`
-	Uptime       string `json:"Uptime"`
-	HomePath     string `json:"Home path"`
-	BootOrder    string `json:"Boot order"`
-	BIOSType     string `json:"BIOS type"`
+	ID            string `json:"ID"`
+	Name          string `json:"Name"`
+	Description   string `json:"Description"`
+	State         string `json:"State"`
+	OS            string `json:"OS"`
+	Template      string `json:"Template"`
+	Uptime        string `json:"Uptime"`
+	HomePath      string `json:"Home path"`
+	BootOrder     string `json:"Boot order"`
+	BIOSType      string `json:"BIOS type"`
 	EFISecureBoot string `json:"EFI Secure boot"`
-	GuestTools   struct {
+	SMBIOS        struct {
+		BIOSVersion  string `json:"BIOS Version"`
+		SerialNumber string `json:"System serial number"`
+		Manufacturer string `json:"Board Manufacturer"`
+	} `json:"SMBIOS settings"`
+	GuestTools struct {
 		State   string `json:"state"`
 		Version string `json:"version"`
 	} `json:"GuestTools"`
 	Security struct {
-		Encrypted  string `json:"Encrypted"`
-		TPMEnabled string `json:"TPM enabled"`
-		TPMType    string `json:"TPM type"`
-		Protected  string `json:"Protected"`
+		Encrypted     string `json:"Encrypted"`
+		TPMEnabled    string `json:"TPM enabled"`
+		TPMType       string `json:"TPM type"`
+		Protected     string `json:"Protected"`
+		Archived      string `json:"Archived"`
+		Packed        string `json:"Packed"`
+		PassProtected string `json:"Custom password protection"`
+		Locked        string `json:"Configuration is locked"`
 	} `json:"Security"`
 	Optimization struct {
-		FasterVM         string `json:"Faster virtual machine"`
-		HypervisorType   string `json:"Hypervisor type"`
-		NestedVirt       string `json:"Nested virtualization"`
-		LongerBattery    string `json:"Longer battery life"`
+		FasterVM        string `json:"Faster virtual machine"`
+		HypervisorType  string `json:"Hypervisor type"`
+		AdaptiveHV      string `json:"Adaptive hypervisor"`
+		NestedVirt      string `json:"Nested virtualization"`
+		PMUVirt         string `json:"PMU virtualization"`
+		AutoCompress    string `json:"Auto compress virtual disks"`
+		ResourceQuota   string `json:"Resource quota"`
 	} `json:"Optimization"`
 	StartupShutdown struct {
-		Autostart string `json:"Autostart"`
-		Autostop  string `json:"Autostop"`
+		Autostart    string `json:"Autostart"`
+		Autostop     string `json:"Autostop"`
+		OnShutdown   string `json:"On shutdown"`
+		OnWindowClose string `json:"On window close"`
+		PauseIdle    string `json:"Pause idle"`
+		UndoDisks    string `json:"Undo disks"`
 	} `json:"Startup and Shutdown"`
+	TimeSyncronization struct {
+		Enabled  bool   `json:"enabled"`
+		Interval int    `json:"Interval (in seconds)"`
+		SmartMode string `json:"Smart mode"`
+	} `json:"Time Synchronization"`
+	SmartGuard struct {
+		Enabled bool `json:"enabled"`
+	} `json:"Smart Guard"`
 	USBBluetooth struct {
-		USB30 string `json:"Support USB 3.0"`
+		USB30          string `json:"Support USB 3.0"`
+		ShareCameras   string `json:"Automatic sharing cameras"`
+		ShareBluetooth string `json:"Automatic sharing bluetooth"`
+		ShareGamepads  string `json:"Automatic sharing gamepads"`
 	} `json:"USB and Bluetooth"`
+	Advanced struct {
+		HostnameSync   string `json:"VM hostname synchronization"`
+		SSHKeysSync    string `json:"Public SSH keys synchronization"`
+		DeveloperTools string `json:"Show developer tools"`
+		RosettaLinux   string `json:"Rosetta Linux"`
+		ShareLocation  string `json:"Share host location"`
+	} `json:"Advanced"`
+	Network struct {
+		Conditioned string  `json:"Conditioned"`
+		IPAddresses []NetIP `json:"ipAddresses"`
+	} `json:"Network"`
 	SharedFolderSettings struct {
 		Enabled   bool   `json:"enabled"`
 		Automount string `json:"Automount"`
 	} `json:"Guest Shared Folders"`
 	Hardware             map[string]json.RawMessage `json:"Hardware"`
-	Network              struct {
-		IPAddresses []NetIP `json:"ipAddresses"`
-	} `json:"Network"`
 	HostSharedFoldersRaw map[string]json.RawMessage `json:"Host Shared Folders"`
 }
 
@@ -77,13 +113,110 @@ type hwMem struct {
 	Size string `json:"size"`
 }
 
+// hwCPUFull is the full cpu entry within Hardware.
+type hwCPUFull struct {
+	CPUs  int    `json:"cpus"`
+	Auto  string `json:"auto"`
+	VTx   bool   `json:"VT-x"`
+	Accl  string `json:"accl"`
+	Mode  string `json:"mode"`
+	Type  string `json:"type"` // arm | x86
+}
+
+// CPUDetails returns extended CPU info (arch, accel, VT-x).
+func (v *VMInfo) CPUDetails() *hwCPUFull {
+	raw, ok := v.Hardware["cpu"]
+	if !ok {
+		return nil
+	}
+	var c hwCPUFull
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil
+	}
+	return &c
+}
+
 // HwDisk is one hdd* entry within Hardware.
 type HwDisk struct {
 	Enabled       bool   `json:"enabled"`
+	Port          string `json:"port"`
 	Image         string `json:"image"`
 	Type          string `json:"type"`
 	Size          string `json:"size"` // e.g. "262144Mb"
 	OnlineCompact string `json:"online-compact"` // "on" | "off"
+}
+
+// HwCDROM is one cdrom* entry within Hardware.
+type HwCDROM struct {
+	Enabled bool   `json:"enabled"`
+	Port    string `json:"port"`
+	Image   string `json:"image"`
+	State   string `json:"state"` // connected | disconnected
+}
+
+// CDROMs returns all cdrom* entries, in key order.
+func (v *VMInfo) CDROMs() []HwCDROM {
+	var keys []string
+	for k := range v.Hardware {
+		if strings.HasPrefix(k, "cdrom") {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	var out []HwCDROM
+	for _, k := range keys {
+		var c HwCDROM
+		if err := json.Unmarshal(v.Hardware[k], &c); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// HwSerial is one serial* entry within Hardware.
+type HwSerial struct {
+	Enabled bool   `json:"enabled"`
+	Socket  string `json:"socket"`
+	Mode    string `json:"mode"` // server | client
+}
+
+// Serials returns all serial* entries, in key order.
+func (v *VMInfo) Serials() []HwSerial {
+	var keys []string
+	for k := range v.Hardware {
+		if strings.HasPrefix(k, "serial") {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	var out []HwSerial
+	for _, k := range keys {
+		var s HwSerial
+		if err := json.Unmarshal(v.Hardware[k], &s); err == nil {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// HwSound is the sound* entry within Hardware.
+type HwSound struct {
+	Enabled bool   `json:"enabled"`
+	Output  string `json:"output"`
+	Mixer   string `json:"mixer"`
+}
+
+// Sound returns the first sound adapter, or nil.
+func (v *VMInfo) Sound() *HwSound {
+	raw, ok := v.Hardware["sound0"]
+	if !ok {
+		return nil
+	}
+	var s HwSound
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return nil
+	}
+	return &s
 }
 
 // HwNet is one net* entry within Hardware.

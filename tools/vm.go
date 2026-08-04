@@ -95,6 +95,9 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 	fmt.Fprintf(&b, "- **state**: %s\n", info.State)
 	fmt.Fprintf(&b, "- **os**: %s\n", info.OS)
 	fmt.Fprintf(&b, "- **uuid**: `%s`\n", info.ID)
+	if info.Description != "" {
+		fmt.Fprintf(&b, "- **description**: %s\n", info.Description)
+	}
 	if info.HomePath != "" {
 		fmt.Fprintf(&b, "- **home**: `%s`\n", info.HomePath)
 	}
@@ -103,7 +106,7 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 	}
 
 	// — Platform / Firmware —
-	if info.BIOSType != "" || info.EFISecureBoot != "" || info.Optimization.HypervisorType != "" {
+	if info.BIOSType != "" || info.Optimization.HypervisorType != "" {
 		b.WriteString("\n### Platform\n\n")
 		if info.BIOSType != "" {
 			fmt.Fprintf(&b, "- **bios**: %s\n", info.BIOSType)
@@ -114,14 +117,37 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 		if info.Optimization.HypervisorType != "" {
 			fmt.Fprintf(&b, "- **hypervisor**: %s\n", info.Optimization.HypervisorType)
 		}
+		if info.Optimization.AdaptiveHV != "" {
+			fmt.Fprintf(&b, "- **adaptive hypervisor**: %s\n", info.Optimization.AdaptiveHV)
+		}
 		if info.Optimization.FasterVM != "" {
 			fmt.Fprintf(&b, "- **faster vm**: %s\n", info.Optimization.FasterVM)
 		}
 		if info.Optimization.NestedVirt != "" {
 			fmt.Fprintf(&b, "- **nested virt**: %s\n", info.Optimization.NestedVirt)
 		}
+		if info.Optimization.PMUVirt != "" {
+			fmt.Fprintf(&b, "- **pmu virt**: %s\n", info.Optimization.PMUVirt)
+		}
+		if info.Optimization.ResourceQuota != "" {
+			fmt.Fprintf(&b, "- **resource quota**: %s\n", info.Optimization.ResourceQuota)
+		}
 		if info.BootOrder != "" {
-			fmt.Fprintf(&b, "- **boot order**: `%s`\n", info.BootOrder)
+			fmt.Fprintf(&b, "- **boot order**: `%s`\n", strings.TrimSpace(info.BootOrder))
+		}
+		// SMBIOS
+		s := info.SMBIOS
+		if s.BIOSVersion != "" || s.SerialNumber != "" || s.Manufacturer != "" {
+			b.WriteString("\n**SMBIOS**\n")
+			if s.BIOSVersion != "" {
+				fmt.Fprintf(&b, "- bios version: `%s`\n", s.BIOSVersion)
+			}
+			if s.SerialNumber != "" {
+				fmt.Fprintf(&b, "- serial: `%s`\n", s.SerialNumber)
+			}
+			if s.Manufacturer != "" {
+				fmt.Fprintf(&b, "- manufacturer: `%s`\n", s.Manufacturer)
+			}
 		}
 	}
 
@@ -135,6 +161,18 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 		b.WriteString("\n")
 		if info.Security.Encrypted != "" {
 			fmt.Fprintf(&b, "- **encrypted**: %s\n", info.Security.Encrypted)
+		}
+		if info.Security.Protected != "" {
+			fmt.Fprintf(&b, "- **protected**: %s\n", info.Security.Protected)
+		}
+		if info.Security.Locked != "" {
+			fmt.Fprintf(&b, "- **config locked**: %s\n", info.Security.Locked)
+		}
+		if info.Security.Archived != "" && info.Security.Archived != "no" {
+			fmt.Fprintf(&b, "- **archived**: %s\n", info.Security.Archived)
+		}
+		if info.Security.Packed != "" && info.Security.Packed != "no" {
+			fmt.Fprintf(&b, "- **packed**: %s\n", info.Security.Packed)
 		}
 	}
 
@@ -150,18 +188,40 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 
 	// — CPU / Memory —
 	b.WriteString("\n### Hardware\n\n")
-	fmt.Fprintf(&b, "- **cpu**: %d vCPU\n", info.CPUs())
+	if cpu := info.CPUDetails(); cpu != nil {
+		fmt.Fprintf(&b, "- **cpu**: %d vCPU (arch: %s, accel: %s, mode: %s, VT-x: %v)\n",
+			cpu.CPUs, or(cpu.Type, "—"), or(cpu.Accl, "—"), or(cpu.Mode, "—"), cpu.VTx)
+	} else {
+		fmt.Fprintf(&b, "- **cpu**: %d vCPU\n", info.CPUs())
+	}
 	if mb := info.MemoryMB(); mb > 0 {
 		fmt.Fprintf(&b, "- **memory**: %d MB (%.1f GB)\n", mb, float64(mb)/1024)
 	}
-	if info.USBBluetooth.USB30 != "" {
-		fmt.Fprintf(&b, "- **usb 3.0**: %s\n", info.USBBluetooth.USB30)
+
+	// — USB —
+	u := info.USBBluetooth
+	if u.USB30 != "" {
+		fmt.Fprintf(&b, "- **usb 3.0**: %s\n", u.USB30)
+	}
+	if u.ShareCameras != "" {
+		fmt.Fprintf(&b, "- **share cameras**: %s\n", u.ShareCameras)
+	}
+	if u.ShareBluetooth != "" {
+		fmt.Fprintf(&b, "- **share bluetooth**: %s\n", u.ShareBluetooth)
+	}
+	if u.ShareGamepads != "" {
+		fmt.Fprintf(&b, "- **share gamepads**: %s\n", u.ShareGamepads)
+	}
+
+	// — Sound —
+	if snd := info.Sound(); snd != nil && snd.Enabled {
+		fmt.Fprintf(&b, "- **sound**: output=%s, mixer=%s\n", or(snd.Output, "—"), or(snd.Mixer, "—"))
 	}
 
 	// — Video —
 	if vid := info.Video(); vid != nil {
-		fmt.Fprintf(&b, "\n### Video\n\n")
-		fmt.Fprintf(&b, "| adapter | 3d-accel | high-res | auto-mem |\n|---|---|---|---|\n")
+		b.WriteString("\n### Video\n\n")
+		b.WriteString("| adapter | 3d-accel | high-res | auto-mem |\n|---|---|---|---|\n")
 		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
 			or(vid.AdapterType, "—"),
 			or(vid.ThreeDAccel, "—"),
@@ -172,23 +232,41 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 
 	// — Disks —
 	if disks := info.Disks(); len(disks) > 0 {
-		b.WriteString("\n### Disks\n\n| type | size | compact | enabled | image |\n|---|---|---|---|---|\n")
+		b.WriteString("\n### Disks\n\n| port | type | size | compact | enabled | image |\n|---|---|---|---|---|---|\n")
 		for _, d := range disks {
-			fmt.Fprintf(&b, "| %s | %s | %s | %v | `%s` |\n",
-				or(d.Type, "—"), or(d.Size, "—"),
-				or(d.OnlineCompact, "—"),
-				d.Enabled, shortPath(d.Image))
+			fmt.Fprintf(&b, "| %s | %s | %s | %s | %v | `%s` |\n",
+				or(d.Port, "—"), or(d.Type, "—"), or(d.Size, "—"),
+				or(d.OnlineCompact, "—"), d.Enabled, shortPath(d.Image))
+		}
+	}
+
+	// — CD-ROMs —
+	if cdroms := info.CDROMs(); len(cdroms) > 0 {
+		b.WriteString("\n### CD-ROMs\n\n| port | state | enabled | image |\n|---|---|---|---|\n")
+		for _, c := range cdroms {
+			fmt.Fprintf(&b, "| %s | %s | %v | `%s` |\n",
+				or(c.Port, "—"), or(c.State, "—"), c.Enabled, shortPath(c.Image))
+		}
+	}
+
+	// — Serial Ports —
+	if serials := info.Serials(); len(serials) > 0 {
+		b.WriteString("\n### Serial Ports\n\n| socket | mode | enabled |\n|---|---|---|\n")
+		for _, s := range serials {
+			fmt.Fprintf(&b, "| `%s` | %s | %v |\n", s.Socket, or(s.Mode, "—"), s.Enabled)
 		}
 	}
 
 	// — Network —
 	if nets := info.Nets(); len(nets) > 0 {
-		b.WriteString("\n### Network\n\n| # | type | card | iface | mac | enabled |\n|---|---|---|---|---|---|\n")
+		conditioned := ""
+		if info.Network.Conditioned != "" && info.Network.Conditioned != "off" {
+			conditioned = fmt.Sprintf(" _(conditioned: %s)_", info.Network.Conditioned)
+		}
+		fmt.Fprintf(&b, "\n### Network%s\n\n| # | type | card | iface | mac | enabled |\n|---|---|---|---|---|---|\n", conditioned)
 		for i, n := range nets {
 			fmt.Fprintf(&b, "| net%d | %s | %s | %s | `%s` | %v |\n",
-				i,
-				or(n.Type, "—"), or(n.Card, "—"), or(n.Iface, "—"),
-				n.MAC, n.Enabled)
+				i, or(n.Type, "—"), or(n.Card, "—"), or(n.Iface, "—"), n.MAC, n.Enabled)
 		}
 	}
 
@@ -200,11 +278,63 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 		}
 	}
 
+	// — Time Synchronization —
+	ts := info.TimeSyncronization
+	if ts.Enabled || ts.Interval > 0 {
+		b.WriteString("\n### Time Synchronization\n\n")
+		fmt.Fprintf(&b, "- **enabled**: %v\n", ts.Enabled)
+		if ts.Interval > 0 {
+			fmt.Fprintf(&b, "- **interval**: %ds\n", ts.Interval)
+		}
+		if ts.SmartMode != "" {
+			fmt.Fprintf(&b, "- **smart mode**: %s\n", ts.SmartMode)
+		}
+	}
+
 	// — Startup & Shutdown —
 	if info.StartupShutdown.Autostart != "" {
 		b.WriteString("\n### Startup & Shutdown\n\n")
-		fmt.Fprintf(&b, "- **autostart**: %s\n", info.StartupShutdown.Autostart)
-		fmt.Fprintf(&b, "- **autostop**: %s\n", info.StartupShutdown.Autostop)
+		ss := info.StartupShutdown
+		fmt.Fprintf(&b, "- **autostart**: %s\n", ss.Autostart)
+		fmt.Fprintf(&b, "- **autostop**: %s\n", ss.Autostop)
+		if ss.OnShutdown != "" {
+			fmt.Fprintf(&b, "- **on shutdown**: %s\n", ss.OnShutdown)
+		}
+		if ss.OnWindowClose != "" {
+			fmt.Fprintf(&b, "- **on window close**: %s\n", ss.OnWindowClose)
+		}
+		if ss.PauseIdle != "" {
+			fmt.Fprintf(&b, "- **pause idle**: %s\n", ss.PauseIdle)
+		}
+		if ss.UndoDisks != "" {
+			fmt.Fprintf(&b, "- **undo disks**: %s\n", ss.UndoDisks)
+		}
+	}
+
+	// — Advanced —
+	adv := info.Advanced
+	if adv.HostnameSync != "" || adv.SSHKeysSync != "" {
+		b.WriteString("\n### Advanced\n\n")
+		if adv.HostnameSync != "" {
+			fmt.Fprintf(&b, "- **hostname sync**: %s\n", adv.HostnameSync)
+		}
+		if adv.SSHKeysSync != "" {
+			fmt.Fprintf(&b, "- **ssh keys sync**: %s\n", adv.SSHKeysSync)
+		}
+		if adv.DeveloperTools != "" {
+			fmt.Fprintf(&b, "- **developer tools**: %s\n", adv.DeveloperTools)
+		}
+		if adv.RosettaLinux != "" {
+			fmt.Fprintf(&b, "- **rosetta linux**: %s\n", adv.RosettaLinux)
+		}
+		if adv.ShareLocation != "" {
+			fmt.Fprintf(&b, "- **share location**: %s\n", adv.ShareLocation)
+		}
+	}
+
+	// — Smart Guard —
+	if info.SmartGuard.Enabled {
+		b.WriteString("\n### Smart Guard\n\n- **enabled**: true\n")
 	}
 
 	// — Host Shared Folders —
@@ -217,8 +347,6 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 
 	return textResult(b.String()), noOut{}, nil
 }
-
-
 
 type vmStartInput struct {
 	VM string `json:"vm" jsonschema:"VM name or UUID"`
