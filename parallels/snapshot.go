@@ -62,14 +62,12 @@ func (c *Client) SnapshotList(ctx context.Context, vmID string) ([]Snapshot, err
 // SnapshotRestore reverts vmID to a snapshot identified by snapID (preferred) or
 // snapName. Exactly one of the two must be provided.
 func (c *Client) SnapshotRestore(ctx context.Context, vmID, snapID, snapName string) error {
-	args := []string{"snapshot-switch", vmID}
-	switch {
-	case strings.TrimSpace(snapID) != "":
-		args = append(args, "-i", snapID)
-	case strings.TrimSpace(snapName) != "":
-		args = append(args, "-n", snapName)
-	default:
+	id := strings.TrimSpace(snapID)
+	if id == "" {
+		id = strings.TrimSpace(snapName)
+	}
+	if id == "" {
 		return fmt.Errorf("snapshot id or name is required")
 	}
-	return c.ok(ctx, Prlctl, args...)
+	return c.ok(ctx, Prlctl, "snapshot-switch", vmID, "-i", id)
 }
