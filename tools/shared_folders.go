@@ -17,11 +17,11 @@ func (t *Tools) registerSharedFolders(s *mcp.Server) {
 }
 
 type vmSharedFoldersInput struct {
-	Action string `json:"action" jsonschema:"enum=list,enum=add,enum=remove,action to perform: list, add, or remove"`
+	Action string `json:"action" jsonschema:"action to perform: list, add, or remove"`
 	VM     string `json:"vm" jsonschema:"VM name or UUID"`
 	Name   string `json:"name,omitempty" jsonschema:"shared folder name (required for add and remove)"`
 	Path   string `json:"path,omitempty" jsonschema:"host path (required for add)"`
-	Mode   string `json:"mode,omitempty" jsonschema:"enum=rw,enum=ro,access mode for add (rw or ro, default rw)"`
+	Mode   string `json:"mode,omitempty" jsonschema:"access mode for add (rw or ro, default rw)"`
 }
 
 func (t *Tools) vmSharedFolders(ctx context.Context, req *mcp.CallToolRequest, in vmSharedFoldersInput) (*mcp.CallToolResult, noOut, error) {
