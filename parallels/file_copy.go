@@ -74,8 +74,11 @@ func (c *Client) writeGuestFile(ctx context.Context, vmID, guestOS, guestPath, b
 			chunk := b64[i:end]
 			appendCmd := fmt.Sprintf(`[System.IO.File]::AppendAllText('%s', '%s')`, tmpB64, chunk)
 			res, err := c.ExecOS(ctx, vmID, appendCmd, guestOS)
-			if err != nil || res.ExitCode != 0 {
-				return fmt.Errorf("append chunk failed: %v", err)
+			if err != nil {
+				return fmt.Errorf("append chunk failed: %w", err)
+			}
+			if res.ExitCode != 0 {
+				return fmt.Errorf("append chunk failed (exit %d): %s", res.ExitCode, res.Stderr)
 			}
 		}
 

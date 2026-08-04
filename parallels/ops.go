@@ -72,7 +72,7 @@ func guestShellArgs(os, command string) []string {
 // or cmdlet (e.g. starts with Get-, Set-, $, or contains PS cmdlets).
 func isPowerShellCommand(command string) bool {
 	trimmed := strings.TrimSpace(command)
-	if strings.HasPrefix(trimmed, "$") {
+	if strings.HasPrefix(trimmed, "$") || strings.HasPrefix(trimmed, "[") {
 		return true
 	}
 	lower := strings.ToLower(trimmed)
