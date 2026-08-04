@@ -24,12 +24,37 @@ func (c *Client) SnapshotList(ctx context.Context, vmID string) ([]Snapshot, err
 		return nil, err
 	}
 	out := strings.TrimSpace(r.Stdout)
-	if out == "" || out == "[]" {
+	if out == "" || out == "[]" || out == "{}" {
 		return nil, nil
 	}
 	var snaps []Snapshot
-	if err := json.Unmarshal([]byte(out), &snaps); err != nil {
+	if err := json.Unmarshal([]byte(out), &snaps); err == nil {
+		return snaps, nil
+	}
+
+	var snapMap map[string]struct {
+		Name        string      `json:"name"`
+		Date        string      `json:"date"`
+		Current     interface{} `json:"current"`
+		State       string      `json:"state"`
+		Description string      `json:"description"`
+		Parent      string      `json:"parent"`
+	}
+	if err := json.Unmarshal([]byte(out), &snapMap); err != nil {
 		return nil, fmt.Errorf("parse snapshot-list output: %w", err)
+	}
+
+	for id, s := range snapMap {
+		currStr := fmt.Sprintf("%v", s.Current)
+		snaps = append(snaps, Snapshot{
+			ID:          id,
+			Name:        s.Name,
+			Date:        s.Date,
+			Current:     currStr,
+			State:       s.State,
+			Description: s.Description,
+			Parent:      s.Parent,
+		})
 	}
 	return snaps, nil
 }
