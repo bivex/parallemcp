@@ -94,9 +94,16 @@ func (c *Client) Stop(ctx context.Context, id string, force bool) error {
 	return err
 }
 
-// Restart reboots a running VM.
+// Restart reboots a running VM. If graceful ACPI restart fails (e.g. Guest Tools missing or operation canceled),
+// it automatically falls back to hard stop + start.
 func (c *Client) Restart(ctx context.Context, id string) error {
-	return c.ok(ctx, Prlctl, "restart", id)
+	err := c.ok(ctx, Prlctl, "restart", id)
+	if err != nil {
+		if stopErr := c.Stop(ctx, id, true); stopErr == nil {
+			return c.Start(ctx, id)
+		}
+	}
+	return err
 }
 
 // Suspend saves VM state to disk (pause-to-disk).
