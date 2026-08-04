@@ -23,6 +23,8 @@ type vmSMBInput struct {
 	FolderPath  string `json:"folder_path,omitempty" jsonschema:"local folder path for 'share' action (e.g. 'C:\\NetworkShare')"`
 	RemoteIP    string `json:"remote_ip,omitempty" jsonschema:"remote VM IP address for 'mount' action (e.g. '10.211.55.4')"`
 	DriveLetter string `json:"drive_letter,omitempty" jsonschema:"drive letter for 'mount' or 'unmount' (default 'S:')"`
+	Username    string `json:"username,omitempty" jsonschema:"optional remote username for 'mount'"`
+	Password    string `json:"password,omitempty" jsonschema:"optional remote password for 'mount'"`
 }
 
 func (t *Tools) vmSMB(ctx context.Context, req *mcp.CallToolRequest, in vmSMBInput) (*mcp.CallToolResult, noOut, error) {
@@ -81,6 +83,8 @@ func (t *Tools) vmSMB(ctx context.Context, req *mcp.CallToolRequest, in vmSMBInp
 			RemoteIP:    in.RemoteIP,
 			ShareName:   in.ShareName,
 			DriveLetter: drive,
+			Username:    in.Username,
+			Password:    in.Password,
 		})
 		if err != nil {
 			return fail("mount smb share", err), noOut{}, nil

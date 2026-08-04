@@ -18,6 +18,8 @@ type SMBMountParams struct {
 	RemoteIP    string
 	ShareName   string
 	DriveLetter string // e.g. "S:" or "S"
+	Username    string // optional
+	Password    string // optional
 }
 
 // SMBUnmountParams describes removing a share or unmounting a drive.
@@ -38,7 +40,7 @@ func (c *Client) SMBShare(ctx context.Context, vmID string, p SMBShareParams) er
 
 	var cmd string
 	if isWindowsOS(info.OS) {
-		cmd = fmt.Sprintf(`$dir = '%s'; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }; net share "%s"="%s" /grant:everyone,full`, p.FolderPath, p.ShareName, p.FolderPath)
+		cmd = fmt.Sprintf(`$dir = '%s'; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }; New-SmbShare -Name '%s' -Path $dir -FullAccess 'Everyone' -ErrorAction SilentlyContinue`, p.FolderPath, p.ShareName)
 	} else {
 		return fmt.Errorf("SMB sharing is currently supported for Windows guest VMs")
 	}
@@ -72,6 +74,9 @@ func (c *Client) SMBMount(ctx context.Context, vmID string, p SMBMountParams) er
 	}
 
 	cmd := fmt.Sprintf(`net use %s \\%s\%s /persistent:yes`, drive, p.RemoteIP, p.ShareName)
+	if p.Username != "" {
+		cmd += fmt.Sprintf(` /user:%s %s`, p.Username, p.Password)
+	}
 	res, err := c.ExecOS(ctx, vmID, cmd, info.OS)
 	if err != nil {
 		return err
@@ -95,9 +100,9 @@ func (c *Client) SMBUnmount(ctx context.Context, vmID string, p SMBUnmountParams
 		if !strings.HasSuffix(drive, ":") {
 			drive += ":"
 		}
-		cmd = fmt.Sprintf(`net use %s /delete /y`, drive)
+		cmd = fmt.Sprintf(`cmd.exe /c net use %s /delete /y`, drive)
 	} else if p.ShareName != "" {
-		cmd = fmt.Sprintf(`net share "%s" /delete /y`, p.ShareName)
+		cmd = fmt.Sprintf(`Remove-SmbShare -Name '%s' -Force -ErrorAction SilentlyContinue`, p.ShareName)
 	} else {
 		return errors.New("drive_letter or share_name is required for unmount")
 	}
