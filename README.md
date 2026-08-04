@@ -83,6 +83,8 @@ claude mcp add parallemcp -- /absolute/path/to/parallemcp
 | `vm_exec` | Run a shell command inside a running VM |
 | `vm_configure` | Change CPU / memory / name |
 | `vm_shared_folders` | Manage host shared folders (list, add, remove) |
+| `vm_file_copy` | Transfer files between host and guest VM (push/pull) |
+| `vm_network` | Manage VM network adapters (list, set type/iface/status) |
 | `server_info` | Parallels version, license, host info |
 | `host_stats` | macOS host CPU, memory, disk, load, uptime |
 

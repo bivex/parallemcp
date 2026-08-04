@@ -189,6 +189,40 @@ func (c *Client) SharedFolderRemove(ctx context.Context, id, name string) error 
 	return c.ok(ctx, Prlctl, "set", id, "--shf-host-del", name)
 }
 
+// NetworkConfigureParams describes options to modify a VM network adapter.
+type NetworkConfigureParams struct {
+	Device  string // "net0", "net1", etc. Default "net0"
+	Type    string // "shared" | "bridged" | "host-only"
+	Iface   string // e.g. "Wi-Fi", "default"
+	Enabled *bool
+}
+
+// NetworkConfigure updates a VM network adapter via `prlctl set <id> --device-set <device> ...`.
+func (c *Client) NetworkConfigure(ctx context.Context, id string, p NetworkConfigureParams) error {
+	dev := p.Device
+	if dev == "" {
+		dev = "net0"
+	}
+	args := []string{"set", id, "--device-set", dev}
+	if p.Type != "" {
+		args = append(args, "--type", p.Type)
+	}
+	if p.Iface != "" {
+		args = append(args, "--iface", p.Iface)
+	}
+	if p.Enabled != nil {
+		if *p.Enabled {
+			args = append(args, "--enable")
+		} else {
+			args = append(args, "--disable")
+		}
+	}
+	if len(args) <= 4 {
+		return errors.New("nothing to configure: provide type, iface, or enabled")
+	}
+	return c.ok(ctx, Prlctl, args...)
+}
+
 // ServerInfo returns Parallels Desktop version, license, and host info.
 func (c *Client) ServerInfo(ctx context.Context) (*ServerInfo, error) {
 	var si ServerInfo
