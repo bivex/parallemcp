@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -53,16 +54,51 @@ func (c *Client) ExecOS(ctx context.Context, id, command, os string) (*ExecResul
 	return res, nil
 }
 
-// guestShellArgs returns the shell+args to run command in a guest of the given
-// OS. Windows guests run PowerShell via -EncodedCommand: the command is UTF-16LE
-// then base64, which sidesteps all quoting/escaping and handles newlines,
-// Unicode, and shell metacharacters reliably (good for large scripts). Every
-// other OS uses /bin/sh -lc verbatim.
+// guestShellArgs returns the shell+args to run command in a guest of the given OS.
+// For Windows guests, it runs cmd.exe /c. If the command appears to be a PowerShell
+// cmdlet or script, it automatically wraps it with powershell.exe -Command "...".
 func guestShellArgs(os, command string) []string {
 	if isWindowsOS(os) {
+		if isPowerShellCommand(command) {
+			psCmd := fmt.Sprintf("powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command %s", quoteCmdArg(command))
+			return []string{"cmd.exe", "/c", psCmd}
+		}
 		return []string{"cmd.exe", "/c", command}
 	}
 	return []string{"/bin/sh", "-lc", command}
+}
+
+// isPowerShellCommand reports whether command appears to be a PowerShell script
+// or cmdlet (e.g. starts with Get-, Set-, $, or contains PS cmdlets).
+func isPowerShellCommand(command string) bool {
+	trimmed := strings.TrimSpace(command)
+	if strings.HasPrefix(trimmed, "$") {
+		return true
+	}
+	lower := strings.ToLower(trimmed)
+	prefixes := []string{
+		"get-", "set-", "new-", "remove-", "start-", "stop-", "restart-",
+		"invoke-", "test-", "update-", "enable-", "disable-", "clear-", "copy-item",
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(lower, p) {
+			return true
+		}
+	}
+	for _, kw := range []string{"select-object", "where-object", "foreach-object", "format-table", "format-list"} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func quoteCmdArg(arg string) string {
+	if strings.ContainsAny(arg, " \t\n\v\"") || strings.Contains(arg, "|") || strings.Contains(arg, "&") {
+		escaped := strings.ReplaceAll(arg, `"`, `\"`)
+		return `"` + escaped + `"`
+	}
+	return arg
 }
 
 // isWindowsOS reports whether os denotes a Windows guest (Parallels reports

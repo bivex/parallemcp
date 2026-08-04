@@ -2,6 +2,7 @@ package parallels
 
 import (
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -94,13 +95,17 @@ func (v *VMInfo) MemoryMB() int {
 
 // Disks returns all hdd* entries (enabled and disabled), in key order.
 func (v *VMInfo) Disks() []HwDisk {
-	var out []HwDisk
-	for k, raw := range v.Hardware {
-		if !strings.HasPrefix(k, "hdd") {
-			continue
+	var keys []string
+	for k := range v.Hardware {
+		if strings.HasPrefix(k, "hdd") {
+			keys = append(keys, k)
 		}
+	}
+	sort.Strings(keys)
+	var out []HwDisk
+	for _, k := range keys {
 		var d HwDisk
-		if err := json.Unmarshal(raw, &d); err == nil {
+		if err := json.Unmarshal(v.Hardware[k], &d); err == nil {
 			out = append(out, d)
 		}
 	}
@@ -109,13 +114,17 @@ func (v *VMInfo) Disks() []HwDisk {
 
 // Nets returns all net* entries, in key order.
 func (v *VMInfo) Nets() []HwNet {
-	var out []HwNet
-	for k, raw := range v.Hardware {
-		if !strings.HasPrefix(k, "net") {
-			continue
+	var keys []string
+	for k := range v.Hardware {
+		if strings.HasPrefix(k, "net") {
+			keys = append(keys, k)
 		}
+	}
+	sort.Strings(keys)
+	var out []HwNet
+	for _, k := range keys {
 		var n HwNet
-		if err := json.Unmarshal(raw, &n); err == nil {
+		if err := json.Unmarshal(v.Hardware[k], &n); err == nil {
 			out = append(out, n)
 		}
 	}

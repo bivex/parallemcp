@@ -166,11 +166,10 @@ func TestVMExecPropagatesExecError(t *testing.T) {
 	}
 }
 
-// TestVMExecDetectsWindowsAndEncodes verifies the handler detects a Windows
-// guest and routes the command through powershell -EncodedCommand: the script
-// is passed as a single base64 (UTF-16LE) argument, untouched by shell quoting.
-func TestVMExecDetectsWindowsAndEncodes(t *testing.T) {
-	script := "Get-ChildItem C:\\ | Where-Object { $_.PSIsContainer }"
+// TestVMExecDetectsWindows verifies the handler detects a Windows guest and
+// routes the command through cmd.exe /c.
+func TestVMExecDetectsWindows(t *testing.T) {
+	script := "dir"
 	tools, run := newExecToolsOS(&parallels.CmdResult{ExitCode: 0, Stdout: "Dir\n"}, nil, "win-11")
 
 	res, _, _ := tools.vmExec(context.Background(), &mcp.CallToolRequest{}, vmExecInput{
@@ -180,21 +179,11 @@ func TestVMExecDetectsWindowsAndEncodes(t *testing.T) {
 		t.Fatalf("unexpected error: %s", textOf(t, res))
 	}
 	a := run.args
-	if len(a) != 7 {
-		t.Fatalf("arg count = %d, want 7: %v", len(a), a)
+	if len(a) != 5 {
+		t.Fatalf("arg count = %d, want 5: %v", len(a), a)
 	}
-	if a[0] != "exec" || a[1] != "Windows 11" || a[2] != "powershell.exe" {
-		t.Errorf("unexpected prefix: %v", a)
-	}
-	if a[3] != "-NoProfile" || a[4] != "-NonInteractive" || a[5] != "-EncodedCommand" {
-		t.Errorf("unexpected powershell flags: %v", a[3:6])
-	}
-	dec, err := decodeUTF16LE(a[6])
-	if err != nil {
-		t.Fatalf("decode encoded command: %v", err)
-	}
-	if dec != script {
-		t.Errorf("encoded command mismatch:\n got  %q\n want %q", dec, script)
+	if a[0] != "exec" || a[1] != "Windows 11" || a[2] != "cmd.exe" || a[3] != "/c" || a[4] != "dir" {
+		t.Errorf("unexpected args: %v", a)
 	}
 	if !strings.Contains(textOf(t, res), "Dir") {
 		t.Errorf("stdout not rendered: %s", textOf(t, res))
