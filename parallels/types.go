@@ -84,6 +84,45 @@ type VMInfo struct {
 		ShareBluetooth string `json:"Automatic sharing bluetooth"`
 		ShareGamepads  string `json:"Automatic sharing gamepads"`
 	} `json:"USB and Bluetooth"`
+	MouseKeyboard struct {
+		SmartMouse      string `json:"Smart mouse optimized for games"`
+		StickyMouse     string `json:"Sticky mouse"`
+		SmoothScrolling string `json:"Smooth scrolling"`
+		KeyboardMode    string `json:"Keyboard optimization mode"`
+	} `json:"Mouse and Keyboard"`
+	PrintManagement struct {
+		SyncPrinters string `json:"Synchronize with host printers"`
+		SyncDefault  string `json:"Synchronize default printer"`
+	} `json:"Print Management"`
+	TravelMode struct {
+		EnterCondition string `json:"Enter condition"`
+		Threshold      int    `json:"Enter threshold"`
+	} `json:"Travel mode"`
+	SharedProfile struct {
+		Enabled      bool   `json:"enabled"`
+		UseDesktop   string `json:"Use desktop"`
+		UseDocuments string `json:"Use documents"`
+		UseDownloads string `json:"Use downloads"`
+		UsePictures  string `json:"Use pictures"`
+		UseMusic     string `json:"Use music"`
+		UseMovies    string `json:"Use movies"`
+	} `json:"Shared Profile"`
+	SharedApps struct {
+		Enabled     bool   `json:"enabled"`
+		HostToGuest string `json:"Host-to-guest apps sharing"`
+		GuestToHost string `json:"Guest-to-host apps sharing"`
+		DockFolder  string `json:"Show guest apps folder in Dock"`
+	} `json:"Shared Applications"`
+	SmartMount struct {
+		Enabled         bool   `json:"enabled"`
+		RemovableDrives string `json:"Removable drives"`
+		CDDVDDrives     string `json:"CD/DVD drives"`
+		NetworkShares   string `json:"Network shares"`
+	} `json:"SmartMount"`
+	MiscSharing struct {
+		SharedClipboardMode string `json:"Shared clipboard mode"`
+		SharedCloud         string `json:"Shared cloud"`
+	} `json:"Miscellaneous Sharing"`
 	Advanced struct {
 		HostnameSync   string `json:"VM hostname synchronization"`
 		SSHKeysSync    string `json:"Public SSH keys synchronization"`

@@ -311,6 +311,52 @@ func (t *Tools) vmInfo(ctx context.Context, req *mcp.CallToolRequest, in vmRefIn
 		}
 	}
 
+	// — Input & Printers —
+	mk := info.MouseKeyboard
+	pm := info.PrintManagement
+	if mk.SmartMouse != "" || pm.SyncPrinters != "" {
+		b.WriteString("\n### Input & Printers\n\n")
+		if mk.SmartMouse != "" {
+			fmt.Fprintf(&b, "- **smart mouse**: %s\n", mk.SmartMouse)
+		}
+		if mk.SmoothScrolling != "" {
+			fmt.Fprintf(&b, "- **smooth scrolling**: %s\n", mk.SmoothScrolling)
+		}
+		if mk.KeyboardMode != "" {
+			fmt.Fprintf(&b, "- **keyboard mode**: %s\n", mk.KeyboardMode)
+		}
+		if pm.SyncPrinters != "" {
+			fmt.Fprintf(&b, "- **sync printers**: %s\n", pm.SyncPrinters)
+		}
+	}
+
+	// — Integration & Sharing —
+	sp := info.SharedProfile
+	sa := info.SharedApps
+	sm := info.SmartMount
+	mc := info.MiscSharing
+	if mc.SharedClipboardMode != "" || sp.Enabled || sa.Enabled {
+		b.WriteString("\n### Integration & Sharing\n\n")
+		if mc.SharedClipboardMode != "" {
+			fmt.Fprintf(&b, "- **shared clipboard**: %s\n", mc.SharedClipboardMode)
+		}
+		if mc.SharedCloud != "" {
+			fmt.Fprintf(&b, "- **shared cloud**: %s\n", mc.SharedCloud)
+		}
+		if sp.Enabled {
+			fmt.Fprintf(&b, "- **shared profile**: enabled (desktop=%s, docs=%s, downloads=%s)\n",
+				or(sp.UseDesktop, "—"), or(sp.UseDocuments, "—"), or(sp.UseDownloads, "—"))
+		}
+		if sa.Enabled {
+			fmt.Fprintf(&b, "- **shared apps**: enabled (host->guest=%s, guest->host=%s)\n",
+				or(sa.HostToGuest, "—"), or(sa.GuestToHost, "—"))
+		}
+		if sm.Enabled {
+			fmt.Fprintf(&b, "- **smart mount**: enabled (removable=%s, cd/dvd=%s, net=%s)\n",
+				or(sm.RemovableDrives, "—"), or(sm.CDDVDDrives, "—"), or(sm.NetworkShares, "—"))
+		}
+	}
+
 	// — Advanced —
 	adv := info.Advanced
 	if adv.HostnameSync != "" || adv.SSHKeysSync != "" {
