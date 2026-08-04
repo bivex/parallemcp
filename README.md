@@ -85,6 +85,7 @@ claude mcp add parallemcp -- /absolute/path/to/parallemcp
 | `vm_shared_folders` | Manage host shared folders (list, add, remove) |
 | `vm_file_copy` | Transfer files between host and guest VM (push/pull) |
 | `vm_network` | Manage VM network adapters (list, set type/iface/status) |
+| `vm_smb` | Manage Windows SMB shares and mapped network drives (list, share, mount, unmount) |
 | `server_info` | Parallels version, license, host info |
 | `host_stats` | macOS host CPU, memory, disk, load, uptime |
 
