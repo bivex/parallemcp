@@ -162,6 +162,33 @@ func (c *Client) Configure(ctx context.Context, id string, p ConfigureParams) er
 	return c.ok(ctx, Prlctl, args...)
 }
 
+// SharedFolderAddParams describes options for adding a host shared folder.
+type SharedFolderAddParams struct {
+	Name string
+	Path string
+	Mode string // "rw" | "ro"
+}
+
+// SharedFolderAdd adds a host shared folder to a VM using `prlctl set <vm> --shf-host-add <name> --path <path>`.
+func (c *Client) SharedFolderAdd(ctx context.Context, id string, p SharedFolderAddParams) error {
+	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Path) == "" {
+		return errors.New("name and path are required")
+	}
+	args := []string{"set", id, "--shf-host-add", p.Name, "--path", p.Path}
+	if p.Mode != "" {
+		args = append(args, "--mode", p.Mode)
+	}
+	return c.ok(ctx, Prlctl, args...)
+}
+
+// SharedFolderRemove removes a host shared folder from a VM using `prlctl set <vm> --shf-host-del <name>`.
+func (c *Client) SharedFolderRemove(ctx context.Context, id, name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("shared folder name is required")
+	}
+	return c.ok(ctx, Prlctl, "set", id, "--shf-host-del", name)
+}
+
 // ServerInfo returns Parallels Desktop version, license, and host info.
 func (c *Client) ServerInfo(ctx context.Context) (*ServerInfo, error) {
 	var si ServerInfo

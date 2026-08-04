@@ -40,6 +40,7 @@ type VMInfo struct {
 	Network  struct {
 		IPAddresses []NetIP `json:"ipAddresses"`
 	} `json:"Network"`
+	HostSharedFoldersRaw map[string]json.RawMessage `json:"Host Shared Folders"`
 }
 
 // hwCPU is the cpu entry within Hardware.
@@ -137,6 +138,48 @@ func (v *VMInfo) IPv4s() []string {
 	for _, a := range v.Network.IPAddresses {
 		if a.Type == "ipv4" && a.IP != "" {
 			out = append(out, a.IP)
+		}
+	}
+	return out
+}
+
+// SharedFolder models a host shared folder entry under Host Shared Folders.
+type SharedFolder struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Mode    string `json:"mode"`
+	Enabled bool   `json:"enabled"`
+}
+
+type rawSharedFolder struct {
+	Enabled bool   `json:"enabled"`
+	Path    string `json:"path"`
+	Mode    string `json:"mode"`
+}
+
+// SharedFolders returns all host shared folders defined for this VM.
+func (v *VMInfo) SharedFolders() []SharedFolder {
+	if len(v.HostSharedFoldersRaw) == 0 {
+		return nil
+	}
+	var keys []string
+	for k := range v.HostSharedFoldersRaw {
+		if k == "enabled" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []SharedFolder
+	for _, k := range keys {
+		var sf rawSharedFolder
+		if err := json.Unmarshal(v.HostSharedFoldersRaw[k], &sf); err == nil {
+			out = append(out, SharedFolder{
+				Name:    k,
+				Path:    sf.Path,
+				Mode:    sf.Mode,
+				Enabled: sf.Enabled,
+			})
 		}
 	}
 	return out
