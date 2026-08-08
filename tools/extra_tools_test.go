@@ -47,4 +47,23 @@ func TestExtraToolsValidation(t *testing.T) {
 	if !res.IsError || !strings.Contains(textOf(t, res), "path") {
 		t.Errorf("expected path error: %s", textOf(t, res))
 	}
+
+	// Configure debugger missing VM
+	res, _, _ = tools.vmConfigureDebugger(context.Background(), &mcp.CallToolRequest{}, vmConfigureDebuggerInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "vm") {
+		t.Errorf("expected vm error: %s", textOf(t, res))
+	}
+
+	// Guest debugger missing VM
+	res, _, _ = tools.vmGuestDebugger(context.Background(), &mcp.CallToolRequest{}, vmGuestDebuggerInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "vm") {
+		t.Errorf("expected vm error: %s", textOf(t, res))
+	}
+
+	// Configure kernel debug missing VM
+	res, _, _ = tools.vmConfigureKernelDebug(context.Background(), &mcp.CallToolRequest{}, vmConfigureKernelDebugInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "vm") {
+		t.Errorf("expected vm error: %s", textOf(t, res))
+	}
 }
+

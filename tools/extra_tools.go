@@ -55,7 +55,14 @@ func (t *Tools) registerExtraTools(s *mcp.Server) {
 			"that GDB / WinDbg should connect to. Requires the debugger interface to be pre-enabled " +
 			"via vm_configure_debugger before the VM was started.",
 	}, t.vmGuestDebugger)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_configure_kernel_debug",
+		Description: "Automate kernel debugging setup for a VM (Windows KDNET, Serial COM Socket, or GDB). " +
+			"Automatically configures serial COM devices, Parallels GDB flags, and (if VM is running Windows) " +
+			"runs bcdedit inside the guest VM to enable kernel debugging.",
+	}, t.vmConfigureKernelDebug)
 }
+
 
 type vmScreenshotInput struct {
 	VM       string `json:"vm" jsonschema:"VM name or UUID"`
@@ -287,6 +294,7 @@ type vmGuestDebuggerInput struct {
 }
 
 func (t *Tools) vmGuestDebugger(ctx context.Context, req *mcp.CallToolRequest, in vmGuestDebuggerInput) (*mcp.CallToolResult, noOut, error) {
+
 	if in.VM == "" {
 		return errResult("`vm` is required"), noOut{}, nil
 	}
@@ -296,3 +304,74 @@ func (t *Tools) vmGuestDebugger(ctx context.Context, req *mcp.CallToolRequest, i
 	}
 	return textResult(fmt.Sprintf("## Guest Debugger: %s\n\n```\n%s\n```", in.VM, strings.TrimSpace(out))), noOut{}, nil
 }
+
+// ── vm_configure_kernel_debug ────────────────────────────────────────────────
+
+type vmConfigureKernelDebugInput struct {
+	VM          string `json:"vm" jsonschema:"VM name or UUID"`
+	Mode        string `json:"mode,omitempty" jsonschema:"debugging mode: 'net' (KDNET Windows), 'serial' (COM socket), 'gdb' (Parallels GDB stub)"`
+	Port        int    `json:"port,omitempty" jsonschema:"TCP port for KDNET or GDB (default: 50000)"`
+	Key         string `json:"key,omitempty" jsonschema:"KDNET encryption key for Windows (default: 1.2.3.4)"`
+	HostIP      string `json:"host_ip,omitempty" jsonschema:"Host IP address for KDNET (default: 10.211.55.2)"`
+	SocketPath  string `json:"socket_path,omitempty" jsonschema:"Unix socket path for serial port (default: /tmp/<vm>_kd.sock)"`
+	AutoBcdedit bool   `json:"auto_bcdedit,omitempty" jsonschema:"automatically run bcdedit inside Windows guest VM"`
+}
+
+func (t *Tools) vmConfigureKernelDebug(ctx context.Context, req *mcp.CallToolRequest, in vmConfigureKernelDebugInput) (*mcp.CallToolResult, noOut, error) {
+	if in.VM == "" {
+		return errResult("`vm` is required"), noOut{}, nil
+	}
+	p := parallels.KernelDebugParams{
+		Mode:        in.Mode,
+		Port:        in.Port,
+		Key:         in.Key,
+		HostIP:      in.HostIP,
+		SocketPath:  in.SocketPath,
+		AutoBcdedit: in.AutoBcdedit,
+	}
+	res, err := t.cli.ConfigureKernelDebug(ctx, in.VM, p)
+	if err != nil {
+		return fail("configure kernel debug", err), noOut{}, nil
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "## Kernel Debugging Configured: %s\n\n", in.VM)
+	fmt.Fprintf(&b, "- **Mode:** `%s`\n", res.Mode)
+
+	switch res.Mode {
+	case "net", "kdnet":
+		fmt.Fprintf(&b, "- **KDNET Port:** `%d`\n", res.KDNETPort)
+		fmt.Fprintf(&b, "- **KDNET Key:** `%s`\n", res.KDNETKey)
+		fmt.Fprintf(&b, "- **Host IP:** `%s`\n", res.HostIP)
+		if in.AutoBcdedit {
+			if res.BcdeditDone {
+				b.WriteString("- **Guest `bcdedit` status:** ✅ Applied successfully inside Windows guest.\n")
+			} else if res.BcdeditError != "" {
+				fmt.Fprintf(&b, "- **Guest `bcdedit` status:** ⚠️ Could not run automatically (`%s`). Run manually inside VM.\n", res.BcdeditError)
+			}
+		} else {
+			b.WriteString("\n**Run inside Windows guest (`cmd.exe` as Administrator):**\n```cmd\nbcdedit /debug on\nbcdedit /dbgsettings net hostip:" + res.HostIP + " port:" + fmt.Sprintf("%d", res.KDNETPort) + " key:" + res.KDNETKey + "\n```\n")
+		}
+		fmt.Fprintf(&b, "\n**WinDbg connect command on Mac host:**\n```\n%s\n```\n", res.ConnectCmd)
+
+	case "serial":
+		fmt.Fprintf(&b, "- **COM Socket Path:** `%s`\n", res.SocketPath)
+		if in.AutoBcdedit {
+			if res.BcdeditDone {
+				b.WriteString("- **Guest `bcdedit` status:** ✅ Applied successfully inside Windows guest.\n")
+			} else if res.BcdeditError != "" {
+				fmt.Fprintf(&b, "- **Guest `bcdedit` status:** ⚠️ Could not run automatically (`%s`).\n", res.BcdeditError)
+			}
+		}
+		b.WriteString("\n**Linux Kernel boot parameter (`cmdline`):**\n```text\nconsole=ttyS0,115200 kgdboc=ttyS0,115200 kgdbwait\n```\n")
+		fmt.Fprintf(&b, "\n**GDB connect command on Mac host:**\n```bash\n%s\n```\n", res.ConnectCmd)
+
+	case "gdb":
+		fmt.Fprintf(&b, "- **GDB Port:** `%d`\n", res.KDNETPort)
+		fmt.Fprintf(&b, "- **Serial Socket:** `%s`\n", res.SocketPath)
+		fmt.Fprintf(&b, "\n**GDB connect command on Mac host:**\n```bash\n%s\n```\n", res.ConnectCmd)
+	}
+
+	return textResult(b.String()), noOut{}, nil
+}
+

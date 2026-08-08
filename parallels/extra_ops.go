@@ -181,3 +181,113 @@ func (c *Client) ConfigureDebugger(ctx context.Context, id string, cfg VMDebugCo
 	return c.ok(ctx, Prlctl, "set", id, "--system-flags", flags)
 }
 
+// KernelDebugParams options for automated kernel debugging setup.
+type KernelDebugParams struct {
+	Mode        string // "net" (KDNET for Windows), "serial" (COM socket), "gdb" (Parallels GDB)
+	Port        int    // KDNET or GDB port (default: 50000)
+	Key         string // KDNET key (default: 1.2.3.4)
+	HostIP      string // Host IP for KDNET (default: 10.211.55.2)
+	SocketPath  string // Unix socket for serial COM port (default: /tmp/<vm>_kd.sock)
+	AutoBcdedit bool   // Automatically execute bcdedit inside Windows VM if running
+}
+
+// KernelDebugResult contains the setup results and generated commands.
+type KernelDebugResult struct {
+	Mode         string
+	SocketPath   string
+	KDNETKey     string
+	KDNETPort    int
+	HostIP       string
+	BcdeditDone  bool
+	BcdeditError string
+	ConnectCmd   string
+}
+
+// ConfigureKernelDebug automates kernel debugging setup for vmID.
+func (c *Client) ConfigureKernelDebug(ctx context.Context, id string, p KernelDebugParams) (*KernelDebugResult, error) {
+	mode := strings.ToLower(strings.TrimSpace(p.Mode))
+	if mode == "" {
+		mode = "net"
+	}
+
+	res := &KernelDebugResult{
+		Mode:       mode,
+		KDNETPort:  p.Port,
+		KDNETKey:   p.Key,
+		HostIP:     p.HostIP,
+		SocketPath: p.SocketPath,
+	}
+
+	if res.KDNETPort <= 0 {
+		res.KDNETPort = 50000
+	}
+	if res.KDNETKey == "" {
+		res.KDNETKey = "1.2.3.4"
+	}
+	if res.HostIP == "" {
+		res.HostIP = "10.211.55.2" // Standard Parallels NAT Host IP
+	}
+	if res.SocketPath == "" {
+		cleanVM := strings.NewReplacer(" ", "_", "/", "_", "\\", "_", ":", "_").Replace(id)
+		res.SocketPath = fmt.Sprintf("/tmp/%s_kd.sock", cleanVM)
+	}
+
+	// Fetch VM info to inspect current devices and OS
+	info, _ := c.Info(ctx, id)
+	osType := ""
+	if info != nil {
+		osType = strings.ToLower(info.OS)
+	}
+
+	switch mode {
+	case "serial":
+		// Ensure serial port device with socket exists
+		_ = c.ok(ctx, Prlctl, "set", id, "--device-add", "serial", "--socket", res.SocketPath, "--socket-mode", "server")
+		if p.AutoBcdedit && strings.Contains(osType, "win") {
+			cmd := "bcdedit /debug on && bcdedit /dbgsettings serial debugport:1 baudrate:115200"
+			r, err := c.ExecOS(ctx, id, cmd, info.OS)
+			if err == nil && r.ExitCode == 0 {
+				res.BcdeditDone = true
+			} else if err != nil {
+				res.BcdeditError = err.Error()
+			} else {
+				res.BcdeditError = strings.TrimSpace(r.Stderr)
+			}
+		}
+		res.ConnectCmd = fmt.Sprintf("gdb vmlinux -ex \"target remote %s\"", res.SocketPath)
+
+	case "gdb":
+		// Configure SystemFlags for GDB stub
+		_ = c.ConfigureDebugger(ctx, id, VMDebugConfig{
+			Enabled:   true,
+			Protocol:  DebugProtocolGDB,
+			LocalAddr: "127.0.0.1",
+		})
+		// Also add serial socket for KGDB fallback
+		_ = c.ok(ctx, Prlctl, "set", id, "--device-add", "serial", "--socket", res.SocketPath, "--socket-mode", "server")
+		res.ConnectCmd = fmt.Sprintf("gdb vmlinux -ex \"target remote 127.0.0.1:%d\"", res.KDNETPort)
+
+	case "net", "kdnet":
+		// Windows KDNET mode
+		if p.AutoBcdedit {
+			cmd := fmt.Sprintf("bcdedit /debug on && bcdedit /dbgsettings net hostip:%s port:%d key:%s",
+				res.HostIP, res.KDNETPort, res.KDNETKey)
+			r, err := c.ExecOS(ctx, id, cmd, "win-11")
+			if err == nil && r.ExitCode == 0 {
+				res.BcdeditDone = true
+			} else if err != nil {
+				res.BcdeditError = err.Error()
+			} else {
+				res.BcdeditError = strings.TrimSpace(r.Stderr)
+			}
+		}
+		res.ConnectCmd = fmt.Sprintf("windbg -k net:port=%d,key=%s,target=%s", res.KDNETPort, res.KDNETKey, res.HostIP)
+
+	default:
+		return nil, fmt.Errorf("unsupported mode: %s (must be 'net', 'serial', or 'gdb')", mode)
+	}
+
+	return res, nil
+}
+
+
