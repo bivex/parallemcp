@@ -227,17 +227,27 @@ func (c *Client) ConfigureKernelDebug(ctx context.Context, id string, p KernelDe
 	if res.HostIP == "" {
 		res.HostIP = "10.211.55.2" // Standard Parallels NAT Host IP
 	}
-	if res.SocketPath == "" {
-		cleanVM := strings.NewReplacer(" ", "_", "/", "_", "\\", "_", ":", "_").Replace(id)
-		res.SocketPath = fmt.Sprintf("/tmp/%s_kd.sock", cleanVM)
-	}
-
-	// Fetch VM info to inspect current devices and OS
+	// Fetch VM info to inspect current devices, home path, and OS
 	info, _ := c.Info(ctx, id)
 	osType := ""
 	if info != nil {
 		osType = strings.ToLower(info.OS)
 	}
+
+	if res.SocketPath == "" {
+		if info != nil && info.HomePath != "" {
+			// Place socket inside .pvm bundle directory to ensure user file ownership
+			pvmDir := info.HomePath
+			if strings.HasSuffix(pvmDir, "/config.pvs") {
+				pvmDir = strings.TrimSuffix(pvmDir, "/config.pvs")
+			}
+			res.SocketPath = pvmDir + "/kd.sock"
+		} else {
+			cleanVM := strings.NewReplacer(" ", "_", "/", "_", "\\", "_", ":", "_").Replace(id)
+			res.SocketPath = fmt.Sprintf("/tmp/%s_kd.sock", cleanVM)
+		}
+	}
+
 
 	switch mode {
 	case "serial":
