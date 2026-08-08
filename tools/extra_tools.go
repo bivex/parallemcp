@@ -77,7 +77,24 @@ func (t *Tools) registerExtraTools(s *mcp.Server) {
 		Name: "vm_debug_serial",
 		Description: "Read or send data over a VM's serial COM Unix socket (e.g. /Volumes/External/.../kd.sock) without writing Python scripts.",
 	}, t.vmDebugSerial)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_breakpoint_set",
+		Description: "Set a software ('break') or hardware ('hbreak') breakpoint at a function name or memory address on a GDB target.",
+	}, t.vmDebugBreakpointSet)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_breakpoint_delete",
+		Description: "Delete a breakpoint by number (or delete all breakpoints) on a GDB target.",
+	}, t.vmDebugBreakpointDelete)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_breakpoint_list",
+		Description: "List all active breakpoints on a GDB target.",
+	}, t.vmDebugBreakpointList)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_continue",
+		Description: "Resume VM execution on a GDB target until a breakpoint is hit or process stops.",
+	}, t.vmDebugContinue)
 }
+
 
 
 
@@ -493,5 +510,84 @@ func (t *Tools) vmDebugSerial(ctx context.Context, req *mcp.CallToolRequest, in 
 	msg := fmt.Sprintf("## Serial Socket Output: `%s`\n\n```text\n%s\n```", in.SocketPath, out)
 	return textResult(msg), noOut{}, nil
 }
+
+// ── vm_debug_breakpoint_set ──────────────────────────────────────────────────
+
+type vmDebugBreakpointSetInput struct {
+	Target   string `json:"target" jsonschema:"GDB target: IP:port or socket path"`
+	Location string `json:"location" jsonschema:"function name (e.g. 'do_sys_openat2') or memory address (e.g. '0xffff800080b554cc')"`
+	Hardware bool   `json:"hardware,omitempty" jsonschema:"true to set a hardware breakpoint ('hbreak'), false for software break"`
+	Arch     string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default)"`
+}
+
+func (t *Tools) vmDebugBreakpointSet(ctx context.Context, req *mcp.CallToolRequest, in vmDebugBreakpointSetInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required"), noOut{}, nil
+	}
+	if in.Location == "" {
+		return errResult("`location` is required"), noOut{}, nil
+	}
+	out, err := t.cli.DebugSetBreakpoint(ctx, in.Target, in.Location, in.Hardware, in.Arch)
+	if err != nil {
+		return fail("set breakpoint via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Breakpoint Set (%s @ %s)\n\n```gdb\n%s\n```", in.Location, in.Target, out)), noOut{}, nil
+}
+
+// ── vm_debug_breakpoint_delete ───────────────────────────────────────────────
+
+type vmDebugBreakpointDeleteInput struct {
+	Target string `json:"target" jsonschema:"GDB target: IP:port or socket path"`
+	Number string `json:"number,omitempty" jsonschema:"breakpoint number to delete (leave empty to delete all breakpoints)"`
+	Arch   string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default)"`
+}
+
+func (t *Tools) vmDebugBreakpointDelete(ctx context.Context, req *mcp.CallToolRequest, in vmDebugBreakpointDeleteInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required"), noOut{}, nil
+	}
+	out, err := t.cli.DebugDeleteBreakpoint(ctx, in.Target, in.Number, in.Arch)
+	if err != nil {
+		return fail("delete breakpoint via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Breakpoint Delete (%s)\n\n```gdb\n%s\n```", in.Target, out)), noOut{}, nil
+}
+
+// ── vm_debug_breakpoint_list ─────────────────────────────────────────────────
+
+type vmDebugBreakpointListInput struct {
+	Target string `json:"target" jsonschema:"GDB target: IP:port or socket path"`
+	Arch   string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default)"`
+}
+
+func (t *Tools) vmDebugBreakpointList(ctx context.Context, req *mcp.CallToolRequest, in vmDebugBreakpointListInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required"), noOut{}, nil
+	}
+	out, err := t.cli.DebugListBreakpoints(ctx, in.Target, in.Arch)
+	if err != nil {
+		return fail("list breakpoints via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Active Breakpoints (%s)\n\n```gdb\n%s\n```", in.Target, out)), noOut{}, nil
+}
+
+// ── vm_debug_continue ────────────────────────────────────────────────────────
+
+type vmDebugContinueInput struct {
+	Target string `json:"target" jsonschema:"GDB target: IP:port or socket path"`
+	Arch   string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default)"`
+}
+
+func (t *Tools) vmDebugContinue(ctx context.Context, req *mcp.CallToolRequest, in vmDebugContinueInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required"), noOut{}, nil
+	}
+	out, err := t.cli.DebugContinue(ctx, in.Target, in.Arch)
+	if err != nil {
+		return fail("continue VM execution via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Execution Continued (%s)\n\n```gdb\n%s\n```", in.Target, out)), noOut{}, nil
+}
+
 
 

@@ -11,8 +11,8 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 
 ## ⚡ Key Highlights
 
-- **36 Native MCP Tools:** Comprehensive suite covering VM lifecycle, snapshots, execution, file transfers, networking, SMB shares, hardware devices, interactive kernel debugging & GDB stepping, disk compacting, and real-time PNG screenshots.
-- **Automated Kernel Debugging & Live GDB Stepping:** Automated setup for Windows KDNET, Serial COM sockets (`/tmp/` or `.pvm` bundle dir), and Parallels GDB stub interfaces. Native tools for reading CPU registers (`vm_debug_registers`), single-stepping instructions (`vm_debug_step`), disassembling code (`vm_debug_disassemble`), and serial socket IO (`vm_debug_serial`) without custom scripts.
+- **40 Native MCP Tools:** Comprehensive suite covering VM lifecycle, snapshots, execution, file transfers, networking, SMB shares, hardware devices, interactive kernel debugging, breakpoints, live GDB stepping, disk compacting, and real-time PNG screenshots.
+- **Automated Kernel Debugging & Live Breakpoints:** Automated setup for Windows KDNET, Serial COM sockets (`/tmp/` or `.pvm` bundle dir), and Parallels GDB stub interfaces. Native tools for reading CPU registers (`vm_debug_registers`), single-stepping instructions (`vm_debug_step`), disassembling code (`vm_debug_disassemble`), setting software & hardware breakpoints (`vm_debug_breakpoint_set`, `vm_debug_breakpoint_delete`, `vm_debug_breakpoint_list`, `vm_debug_continue`), and serial socket IO (`vm_debug_serial`) without custom scripts.
 - **Zero Third-Party Dependencies / Network Overhead:** Wraps native `prlctl` and `prlsrvctl` CLI tools over JSON-RPC over stdin/stdout with strict stderr logging discipline.
 - **Smart Windows & Linux Support:**
   - **Auto-PowerShell Detection:** Automatically detects PowerShell cmdlets (`Get-`, `Set-`, `$`, `[System.IO]`) and routes execution through clean, non-interactive PowerShell environments.
@@ -22,7 +22,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 
 ---
 
-## 🛠️ Complete Tools Reference (36 Tools)
+## 🛠️ Complete Tools Reference (40 Tools)
 
 ### 📊 1. System & Host Information (4 Tools)
 
@@ -45,7 +45,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_resume` | `vm` | Resume a suspended VM. |
 | `vm_restart` | `vm` | Reboot a running VM. |
 
-### 🐛 3. Kernel Debugging & Interactive GDB Stepping (7 Tools)
+### 🐛 3. Kernel Debugging & Breakpoint Control (11 Tools)
 
 | Tool | Parameters | Description |
 |---|---|---|
@@ -55,7 +55,12 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_debug_registers` | `target`, `arch?` | Read CPU registers (PC, SP, CPSR, X0-X30) directly from GDB target without custom scripts. |
 | `vm_debug_step` | `target`, `arch?`, `steps?` | Execute single-instruction step (`stepi`) and return updated registers & disassembly. |
 | `vm_debug_disassemble` | `target`, `address?`, `count?`, `arch?` | Disassemble instructions around PC or target address. |
+| `vm_debug_breakpoint_set` | `target`, `location`, `hardware?`, `arch?` | Set a software (`break`) or hardware (`hbreak`) breakpoint at function name or memory address. |
+| `vm_debug_breakpoint_delete` | `target`, `number?`, `arch?` | Delete a breakpoint by number (or delete all breakpoints). |
+| `vm_debug_breakpoint_list` | `target`, `arch?` | List all active breakpoints on GDB target. |
+| `vm_debug_continue` | `target`, `arch?` | Resume VM execution on GDB target until a breakpoint is hit or process stops. |
 | `vm_debug_serial` | `socket_path`, `send_string?`, `timeout_sec?` | Read or write data directly over a VM's serial COM Unix socket (`kd.sock`). |
+
 
 
 ### 🛠️ 4. Provisioning, Resources & Bundles (5 Tools)

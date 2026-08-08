@@ -362,5 +362,34 @@ func (c *Client) DebugSerialReadWrite(ctx context.Context, socketPath string, se
 	return string(buf[:n]), nil
 }
 
+// DebugSetBreakpoint sets a software (break) or hardware (hbreak) breakpoint on location.
+func (c *Client) DebugSetBreakpoint(ctx context.Context, target, location string, hardware bool, arch string) (string, error) {
+	if strings.TrimSpace(location) == "" {
+		return "", errors.New("location is required (e.g. 'do_sys_openat2' or '0xffff800080b554cc')")
+	}
+	bpCmd := "break " + location
+	if hardware {
+		bpCmd = "hbreak " + location
+	}
+	return c.DebugGDBExec(ctx, target, arch, []string{bpCmd, "info breakpoints"})
+}
+
+// DebugDeleteBreakpoint deletes a breakpoint by number or all breakpoints if empty.
+func (c *Client) DebugDeleteBreakpoint(ctx context.Context, target, number string, arch string) (string, error) {
+	delCmd := "delete " + strings.TrimSpace(number)
+	return c.DebugGDBExec(ctx, target, arch, []string{delCmd, "info breakpoints"})
+}
+
+// DebugListBreakpoints lists all active breakpoints on target.
+func (c *Client) DebugListBreakpoints(ctx context.Context, target string, arch string) (string, error) {
+	return c.DebugGDBExec(ctx, target, arch, []string{"info breakpoints"})
+}
+
+// DebugContinue resumes VM execution until a breakpoint is hit or process exits.
+func (c *Client) DebugContinue(ctx context.Context, target string, arch string) (string, error) {
+	return c.DebugGDBExec(ctx, target, arch, []string{"continue", "info registers pc sp cpsr"})
+}
+
+
 
 

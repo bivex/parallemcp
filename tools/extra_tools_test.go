@@ -89,6 +89,31 @@ func TestExtraToolsValidation(t *testing.T) {
 	if !res.IsError || !strings.Contains(textOf(t, res), "socket_path") {
 		t.Errorf("expected socket_path error: %s", textOf(t, res))
 	}
+
+	// Breakpoint set missing location / target
+	res, _, _ = tools.vmDebugBreakpointSet(context.Background(), &mcp.CallToolRequest{}, vmDebugBreakpointSetInput{Target: "target"})
+	if !res.IsError || !strings.Contains(textOf(t, res), "location") {
+		t.Errorf("expected location error: %s", textOf(t, res))
+	}
+
+	// Breakpoint delete missing target
+	res, _, _ = tools.vmDebugBreakpointDelete(context.Background(), &mcp.CallToolRequest{}, vmDebugBreakpointDeleteInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "target") {
+		t.Errorf("expected target error: %s", textOf(t, res))
+	}
+
+	// Breakpoint list missing target
+	res, _, _ = tools.vmDebugBreakpointList(context.Background(), &mcp.CallToolRequest{}, vmDebugBreakpointListInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "target") {
+		t.Errorf("expected target error: %s", textOf(t, res))
+	}
+
+	// Debug continue missing target
+	res, _, _ = tools.vmDebugContinue(context.Background(), &mcp.CallToolRequest{}, vmDebugContinueInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "target") {
+		t.Errorf("expected target error: %s", textOf(t, res))
+	}
 }
+
 
 
