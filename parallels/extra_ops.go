@@ -306,10 +306,14 @@ func (c *Client) ConfigureKernelDebug(ctx context.Context, id string, p KernelDe
 
 // DebugGDBExec runs GDB batch commands targeting a remote socket or TCP endpoint.
 func (c *Client) DebugGDBExec(ctx context.Context, target string, arch string, gdbCmds []string) (string, error) {
+	if strings.TrimSpace(target) == "" {
+		return "", errors.New("target is required")
+	}
 	gdbBin := "gdb"
 	if _, err := exec.LookPath("/opt/homebrew/bin/gdb"); err == nil {
 		gdbBin = "/opt/homebrew/bin/gdb"
 	}
+
 
 	if arch == "" {
 		arch = "aarch64"

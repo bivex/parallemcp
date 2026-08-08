@@ -65,5 +65,30 @@ func TestExtraToolsValidation(t *testing.T) {
 	if !res.IsError || !strings.Contains(textOf(t, res), "vm") {
 		t.Errorf("expected vm error: %s", textOf(t, res))
 	}
+
+	// Debug registers missing target
+	res, _, _ = tools.vmDebugRegisters(context.Background(), &mcp.CallToolRequest{}, vmDebugRegistersInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "target") {
+		t.Errorf("expected target error: %s", textOf(t, res))
+	}
+
+	// Debug step missing target
+	res, _, _ = tools.vmDebugStep(context.Background(), &mcp.CallToolRequest{}, vmDebugStepInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "target") {
+		t.Errorf("expected target error: %s", textOf(t, res))
+	}
+
+	// Debug disassemble missing target
+	res, _, _ = tools.vmDebugDisassemble(context.Background(), &mcp.CallToolRequest{}, vmDebugDisassembleInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "target") {
+		t.Errorf("expected target error: %s", textOf(t, res))
+	}
+
+	// Debug serial missing socket_path
+	res, _, _ = tools.vmDebugSerial(context.Background(), &mcp.CallToolRequest{}, vmDebugSerialInput{})
+	if !res.IsError || !strings.Contains(textOf(t, res), "socket_path") {
+		t.Errorf("expected socket_path error: %s", textOf(t, res))
+	}
 }
+
 

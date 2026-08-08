@@ -20,7 +20,9 @@ func TestExtraOps(t *testing.T) {
 		"prlctl set vm --device-del net1":                               "",
 		"prlctl register /tmp/vm.pvm":                                   "",
 		"prlctl unregister vm":                                          "",
+		"prlctl set vm --system-flags vm.debug=1&vm.debug.protocol=0&vm.debug.local_addr=127.0.0.1": "",
 	})
+
 	c := &Client{Run: stub}
 	ctx := context.Background()
 
@@ -63,7 +65,56 @@ func TestExtraOps(t *testing.T) {
 	if err := c.UnregisterBundle(ctx, "vm"); err != nil {
 		t.Errorf("UnregisterBundle: %v", err)
 	}
+	if err := c.ConfigureDebugger(ctx, "vm", VMDebugConfig{Enabled: true, Protocol: DebugProtocolGDB, LocalAddr: "127.0.0.1"}); err != nil {
+		t.Errorf("ConfigureDebugger: %v", err)
+	}
 }
+
+func TestConfigureKernelDebug(t *testing.T) {
+	stub := newStub(map[string]string{
+		"prlctl set vm --device-add serial --socket /tmp/vm_kd.sock --socket-mode server": "",
+		"prlctl set vm --system-flags vm.debug=1&vm.debug.protocol=0&vm.debug.local_addr=127.0.0.1": "",
+	})
+	c := &Client{Run: stub}
+	ctx := context.Background()
+
+	// Mode: serial
+	resSerial, err := c.ConfigureKernelDebug(ctx, "vm", KernelDebugParams{Mode: "serial", SocketPath: "/tmp/vm_kd.sock"})
+	if err != nil {
+		t.Fatalf("ConfigureKernelDebug serial: %v", err)
+	}
+	if resSerial.SocketPath != "/tmp/vm_kd.sock" {
+		t.Errorf("expected socket path /tmp/vm_kd.sock, got %s", resSerial.SocketPath)
+	}
+
+	// Mode: gdb
+	resGDB, err := c.ConfigureKernelDebug(ctx, "vm", KernelDebugParams{Mode: "gdb", SocketPath: "/tmp/vm_kd.sock", Port: 50000})
+	if err != nil {
+		t.Fatalf("ConfigureKernelDebug gdb: %v", err)
+	}
+	if resGDB.KDNETPort != 50000 {
+		t.Errorf("expected port 50000, got %d", resGDB.KDNETPort)
+	}
+
+	// Edge case: invalid mode
+	_, err = c.ConfigureKernelDebug(ctx, "vm", KernelDebugParams{Mode: "invalid_mode"})
+	if err == nil {
+		t.Errorf("expected error for invalid mode, got nil")
+	}
+
+	// Edge case: DebugGDBExec empty target
+	_, err = c.DebugGDBExec(ctx, "", "aarch64", nil)
+	if err == nil {
+		t.Errorf("expected error for empty target in DebugGDBExec, got nil")
+	}
+
+	// Edge case: DebugSerialReadWrite empty socket path
+	_, err = c.DebugSerialReadWrite(ctx, "", "", 0)
+	if err == nil {
+		t.Errorf("expected error for empty socket path in DebugSerialReadWrite, got nil")
+	}
+}
+
 
 func TestGuestDir(t *testing.T) {
 	winPath := `C:\Temp\Folder\file.txt`
