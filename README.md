@@ -11,7 +11,8 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 
 ## ⚡ Key Highlights
 
-- **31 Native MCP Tools:** Comprehensive suite covering VM lifecycle, snapshots, execution, file transfers, networking, SMB shares, hardware devices, disk compacting, and real-time PNG screenshots.
+- **32 Native MCP Tools:** Comprehensive suite covering VM lifecycle, snapshots, execution, file transfers, networking, SMB shares, hardware devices, kernel debugging automation, disk compacting, and real-time PNG screenshots.
+- **Automated Kernel Debugging:** Automated setup for Windows KDNET, Serial COM sockets (`/tmp/` or `.pvm` bundle dir), and Parallels GDB stub interfaces (`vm_configure_kernel_debug`, `vm_configure_debugger`, `vm_guest_debugger`).
 - **Zero Third-Party Dependencies / Network Overhead:** Wraps native `prlctl` and `prlsrvctl` CLI tools over JSON-RPC over stdin/stdout with strict stderr logging discipline.
 - **Smart Windows & Linux Support:**
   - **Auto-PowerShell Detection:** Automatically detects PowerShell cmdlets (`Get-`, `Set-`, `$`, `[System.IO]`) and routes execution through clean, non-interactive PowerShell environments.
@@ -21,7 +22,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 
 ---
 
-## 🛠️ Complete Tools Reference (31 Tools)
+## 🛠️ Complete Tools Reference (32 Tools)
 
 ### 📊 1. System & Host Information (4 Tools)
 
@@ -44,7 +45,15 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_resume` | `vm` | Resume a suspended VM. |
 | `vm_restart` | `vm` | Reboot a running VM. |
 
-### 🛠️ 3. Provisioning, Resources & Bundles (5 Tools)
+### 🐛 3. Kernel Debugging & GDB Automation (3 Tools)
+
+| Tool | Parameters | Description |
+|---|---|---|
+| `vm_configure_kernel_debug` | `vm`, `mode?`, `port?`, `key?`, `host_ip?`, `socket_path?`, `auto_bcdedit?` | Automate kernel debugging setup (Windows KDNET, Serial COM Socket, or GDB stub). Auto-runs `bcdedit` in Windows guests. |
+| `vm_configure_debugger` | `vm`, `enable`, `protocol?`, `local_addr?` | Enable/disable built-in Parallels guest debugger (`vm.debug` flags) for GDB or WinDbg. |
+| `vm_guest_debugger` | `vm`, `port?` | Attach built-in Parallels guest debugger to a running VM and return host connection port. |
+
+### 🛠️ 4. Provisioning, Resources & Bundles (5 Tools)
 
 | Tool | Parameters | Description |
 |---|---|---|
@@ -54,7 +63,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_delete` | `vm`, `confirm: true` | Safely delete a VM and its disk files (auto-stops VM if running). |
 | `vm_bundle` | `action` (`register`/`unregister`), `path?`, `vm?` | Register existing `.pvm` bundles or unregister without deleting files. |
 
-### 📸 4. Snapshots & Visual Display (5 Tools)
+### 📸 5. Snapshots & Visual Display (5 Tools)
 
 | Tool | Parameters | Description |
 |---|---|---|
@@ -64,7 +73,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_snapshot_delete` | `vm`, `id` | Delete a snapshot to free disk space. |
 | `vm_screenshot` | `vm`, `file_path?` | Capture a high-resolution PNG screenshot of a VM's display. |
 
-### 💻 5. Operations, Guest Execution & Devices (10 Tools)
+### 💻 6. Operations, Guest Execution & Devices (8 Tools)
 
 | Tool | Parameters | Description |
 |---|---|---|
@@ -78,6 +87,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_disk_manage` | `vm`, `action`, `size`, `device?` | Add a new virtual hard disk or resize an existing disk (`add`, `resize`). |
 | `vm_install_tools` | `vm` | Mount Parallels Guest Tools installer ISO into the guest OS. |
 | `vm_device` | `vm`, `action`, `device_type?`, `device_name?` | Add or remove hardware devices (network adapters, serial ports, sound cards). |
+
 
 ---
 
