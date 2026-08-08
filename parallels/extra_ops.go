@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os/exec"
 	"strings"
+	"time"
 )
+
 
 
 // Capture takes a screenshot of vmID's display and saves it to filePath (PNG format).
@@ -299,5 +303,60 @@ func (c *Client) ConfigureKernelDebug(ctx context.Context, id string, p KernelDe
 
 	return res, nil
 }
+
+// DebugGDBExec runs GDB batch commands targeting a remote socket or TCP endpoint.
+func (c *Client) DebugGDBExec(ctx context.Context, target string, arch string, gdbCmds []string) (string, error) {
+	gdbBin := "gdb"
+	if _, err := exec.LookPath("/opt/homebrew/bin/gdb"); err == nil {
+		gdbBin = "/opt/homebrew/bin/gdb"
+	}
+
+	if arch == "" {
+		arch = "aarch64"
+	}
+
+	args := []string{"-batch", "-ex", "set architecture " + arch}
+	if target != "" {
+		args = append(args, "-ex", "target remote "+target)
+	}
+	for _, cmd := range gdbCmds {
+		args = append(args, "-ex", cmd)
+	}
+
+	r, err := c.exec(ctx, gdbBin, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(r.Stdout + "\n" + r.Stderr), nil
+}
+
+// DebugSerialReadWrite reads/writes data over a UNIX domain serial socket without Python.
+func (c *Client) DebugSerialReadWrite(ctx context.Context, socketPath string, sendStr string, timeout time.Duration) (string, error) {
+	if strings.TrimSpace(socketPath) == "" {
+		return "", errors.New("socket_path is required")
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	d := net.Dialer{Timeout: timeout}
+	conn, err := d.DialContext(ctx, "unix", socketPath)
+	if err != nil {
+		return "", fmt.Errorf("dial unix socket %s: %w", socketPath, err)
+	}
+	defer conn.Close()
+
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+
+	if sendStr != "" {
+		if _, err := conn.Write([]byte(sendStr)); err != nil {
+			return "", fmt.Errorf("write to socket: %w", err)
+		}
+	}
+
+	buf := make([]byte, 4096)
+	n, _ := conn.Read(buf)
+	return string(buf[:n]), nil
+}
+
 
 

@@ -61,7 +61,24 @@ func (t *Tools) registerExtraTools(s *mcp.Server) {
 			"Automatically configures serial COM devices, Parallels GDB flags, and (if VM is running Windows) " +
 			"runs bcdedit inside the guest VM to enable kernel debugging.",
 	}, t.vmConfigureKernelDebug)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_registers",
+		Description: "Read CPU register values (PC, SP, CPSR, X0-X30 or RAX-RIP) directly from a GDB target (IP:port or Unix socket) without manual GDB commands.",
+	}, t.vmDebugRegisters)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_step",
+		Description: "Execute a single instruction step (stepi) on a GDB target and return updated registers and disassembly.",
+	}, t.vmDebugStep)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_disassemble",
+		Description: "Disassemble instructions around an address/PC on a GDB target without manual GDB scripts.",
+	}, t.vmDebugDisassemble)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_debug_serial",
+		Description: "Read or send data over a VM's serial COM Unix socket (e.g. /Volumes/External/.../kd.sock) without writing Python scripts.",
+	}, t.vmDebugSerial)
 }
+
 
 
 type vmScreenshotInput struct {
@@ -374,4 +391,107 @@ func (t *Tools) vmConfigureKernelDebug(ctx context.Context, req *mcp.CallToolReq
 
 	return textResult(b.String()), noOut{}, nil
 }
+
+// ── vm_debug_registers ───────────────────────────────────────────────────────
+
+type vmDebugRegistersInput struct {
+	Target string `json:"target" jsonschema:"GDB target: IP:port (e.g. '127.0.0.1:49930') or socket path"`
+	Arch   string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default), 'x86_64', 'i386'"`
+}
+
+func (t *Tools) vmDebugRegisters(ctx context.Context, req *mcp.CallToolRequest, in vmDebugRegistersInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required (e.g. '127.0.0.1:49930')"), noOut{}, nil
+	}
+	out, err := t.cli.DebugGDBExec(ctx, in.Target, in.Arch, []string{"info registers"})
+	if err != nil {
+		return fail("read registers via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Registers (%s)\n\n```gdb\n%s\n```", in.Target, out)), noOut{}, nil
+}
+
+// ── vm_debug_step ────────────────────────────────────────────────────────────
+
+type vmDebugStepInput struct {
+	Target string `json:"target" jsonschema:"GDB target: IP:port or socket path"`
+	Arch   string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default)"`
+	Steps  int    `json:"steps,omitempty" jsonschema:"number of instruction steps (default: 1)"`
+}
+
+func (t *Tools) vmDebugStep(ctx context.Context, req *mcp.CallToolRequest, in vmDebugStepInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required"), noOut{}, nil
+	}
+	steps := in.Steps
+	if steps <= 0 {
+		steps = 1
+	}
+	cmds := []string{}
+	for i := 0; i < steps; i++ {
+		cmds = append(cmds, "stepi")
+	}
+	cmds = append(cmds, "disassemble", "info registers pc sp cpsr")
+
+	out, err := t.cli.DebugGDBExec(ctx, in.Target, in.Arch, cmds)
+	if err != nil {
+		return fail("step instruction via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Instruction Step (%d step[s] @ %s)\n\n```gdb\n%s\n```", steps, in.Target, out)), noOut{}, nil
+}
+
+// ── vm_debug_disassemble ─────────────────────────────────────────────────────
+
+type vmDebugDisassembleInput struct {
+	Target  string `json:"target" jsonschema:"GDB target: IP:port or socket path"`
+	Address string `json:"address,omitempty" jsonschema:"expression or address to disassemble (default: current PC)"`
+	Count   int    `json:"count,omitempty" jsonschema:"number of instructions to disassemble (default: 10)"`
+	Arch    string `json:"arch,omitempty" jsonschema:"target architecture: 'aarch64' (default)"`
+}
+
+func (t *Tools) vmDebugDisassemble(ctx context.Context, req *mcp.CallToolRequest, in vmDebugDisassembleInput) (*mcp.CallToolResult, noOut, error) {
+	if in.Target == "" {
+		return errResult("`target` is required"), noOut{}, nil
+	}
+	count := in.Count
+	if count <= 0 {
+		count = 10
+	}
+	disCmd := fmt.Sprintf("disassemble /m , +%d", count*4)
+	if in.Address != "" {
+		disCmd = fmt.Sprintf("disassemble %s, +%d", in.Address, count*4)
+	}
+	out, err := t.cli.DebugGDBExec(ctx, in.Target, in.Arch, []string{disCmd})
+	if err != nil {
+		return fail("disassemble via GDB", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## GDB Disassembly (%s)\n\n```assembly\n%s\n```", in.Target, out)), noOut{}, nil
+}
+
+// ── vm_debug_serial ──────────────────────────────────────────────────────────
+
+type vmDebugSerialInput struct {
+	SocketPath string `json:"socket_path" jsonschema:"Unix socket path for serial port (e.g. /Volumes/External/.../kd.sock)"`
+	SendString string `json:"send_string,omitempty" jsonschema:"string or command to send to the serial socket"`
+	TimeoutSec int    `json:"timeout_sec,omitempty" jsonschema:"read timeout in seconds (default: 2)"`
+}
+
+func (t *Tools) vmDebugSerial(ctx context.Context, req *mcp.CallToolRequest, in vmDebugSerialInput) (*mcp.CallToolResult, noOut, error) {
+	if in.SocketPath == "" {
+		return errResult("`socket_path` is required"), noOut{}, nil
+	}
+	timeout := time.Duration(in.TimeoutSec) * time.Second
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	out, err := t.cli.DebugSerialReadWrite(ctx, in.SocketPath, in.SendString, timeout)
+	if err != nil {
+		return fail("read/write serial socket", err), noOut{}, nil
+	}
+	if out == "" {
+		out = "_(no data received within timeout)_"
+	}
+	msg := fmt.Sprintf("## Serial Socket Output: `%s`\n\n```text\n%s\n```", in.SocketPath, out)
+	return textResult(msg), noOut{}, nil
+}
+
 
