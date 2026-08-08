@@ -11,8 +11,8 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 
 ## ⚡ Key Highlights
 
-- **32 Native MCP Tools:** Comprehensive suite covering VM lifecycle, snapshots, execution, file transfers, networking, SMB shares, hardware devices, kernel debugging automation, disk compacting, and real-time PNG screenshots.
-- **Automated Kernel Debugging:** Automated setup for Windows KDNET, Serial COM sockets (`/tmp/` or `.pvm` bundle dir), and Parallels GDB stub interfaces (`vm_configure_kernel_debug`, `vm_configure_debugger`, `vm_guest_debugger`).
+- **36 Native MCP Tools:** Comprehensive suite covering VM lifecycle, snapshots, execution, file transfers, networking, SMB shares, hardware devices, interactive kernel debugging & GDB stepping, disk compacting, and real-time PNG screenshots.
+- **Automated Kernel Debugging & Live GDB Stepping:** Automated setup for Windows KDNET, Serial COM sockets (`/tmp/` or `.pvm` bundle dir), and Parallels GDB stub interfaces. Native tools for reading CPU registers (`vm_debug_registers`), single-stepping instructions (`vm_debug_step`), disassembling code (`vm_debug_disassemble`), and serial socket IO (`vm_debug_serial`) without custom scripts.
 - **Zero Third-Party Dependencies / Network Overhead:** Wraps native `prlctl` and `prlsrvctl` CLI tools over JSON-RPC over stdin/stdout with strict stderr logging discipline.
 - **Smart Windows & Linux Support:**
   - **Auto-PowerShell Detection:** Automatically detects PowerShell cmdlets (`Get-`, `Set-`, `$`, `[System.IO]`) and routes execution through clean, non-interactive PowerShell environments.
@@ -22,7 +22,7 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 
 ---
 
-## 🛠️ Complete Tools Reference (32 Tools)
+## 🛠️ Complete Tools Reference (36 Tools)
 
 ### 📊 1. System & Host Information (4 Tools)
 
@@ -45,13 +45,18 @@ A high-performance, native [Model Context Protocol (MCP)](https://modelcontextpr
 | `vm_resume` | `vm` | Resume a suspended VM. |
 | `vm_restart` | `vm` | Reboot a running VM. |
 
-### 🐛 3. Kernel Debugging & GDB Automation (3 Tools)
+### 🐛 3. Kernel Debugging & Interactive GDB Stepping (7 Tools)
 
 | Tool | Parameters | Description |
 |---|---|---|
 | `vm_configure_kernel_debug` | `vm`, `mode?`, `port?`, `key?`, `host_ip?`, `socket_path?`, `auto_bcdedit?` | Automate kernel debugging setup (Windows KDNET, Serial COM Socket, or GDB stub). Auto-runs `bcdedit` in Windows guests. |
 | `vm_configure_debugger` | `vm`, `enable`, `protocol?`, `local_addr?` | Enable/disable built-in Parallels guest debugger (`vm.debug` flags) for GDB or WinDbg. |
 | `vm_guest_debugger` | `vm`, `port?` | Attach built-in Parallels guest debugger to a running VM and return host connection port. |
+| `vm_debug_registers` | `target`, `arch?` | Read CPU registers (PC, SP, CPSR, X0-X30) directly from GDB target without custom scripts. |
+| `vm_debug_step` | `target`, `arch?`, `steps?` | Execute single-instruction step (`stepi`) and return updated registers & disassembly. |
+| `vm_debug_disassemble` | `target`, `address?`, `count?`, `arch?` | Disassemble instructions around PC or target address. |
+| `vm_debug_serial` | `socket_path`, `send_string?`, `timeout_sec?` | Read or write data directly over a VM's serial COM Unix socket (`kd.sock`). |
+
 
 ### 🛠️ 4. Provisioning, Resources & Bundles (5 Tools)
 
