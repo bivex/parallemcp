@@ -43,6 +43,18 @@ func (t *Tools) registerExtraTools(s *mcp.Server) {
 		Name:        "vm_bundle",
 		Description: "Register an existing .pvm bundle path or unregister a VM without deleting files.",
 	}, t.vmBundle)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_configure_debugger",
+		Description: "Enable or disable the Parallels built-in guest debugger interface (GDB or KDBG/WinDbg) " +
+			"by writing vm.debug SystemFlags to config.pvs. The VM must be stopped first. " +
+			"After enabling, start the VM and call vm_guest_debugger to connect.",
+	}, t.vmConfigureDebugger)
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "vm_guest_debugger",
+		Description: "Attach the Parallels guest debugger to a running VM and return the host:port " +
+			"that GDB / WinDbg should connect to. Requires the debugger interface to be pre-enabled " +
+			"via vm_configure_debugger before the VM was started.",
+	}, t.vmGuestDebugger)
 }
 
 type vmScreenshotInput struct {
@@ -213,4 +225,74 @@ func (t *Tools) vmBundle(ctx context.Context, req *mcp.CallToolRequest, in vmBun
 func sanitize(s string) string {
 	r := strings.NewReplacer(" ", "_", "/", "_", "\\", "_", ":", "_")
 	return r.Replace(s)
+}
+// ── vm_configure_debugger ────────────────────────────────────────────────────
+
+type vmConfigureDebuggerInput struct {
+	VM        string `json:"vm" jsonschema:"VM name or UUID (must be stopped)"`
+	Enable    bool   `json:"enable" jsonschema:"true to enable the debugger interface, false to disable"`
+	Protocol  string `json:"protocol,omitempty" jsonschema:"wire protocol: 'gdb' (default) or 'kdbg' (WinDbg/KDBG)"`
+	LocalAddr string `json:"local_addr,omitempty" jsonschema:"host-side IP to bind the debug socket (default: 127.0.0.1)"`
+}
+
+func (t *Tools) vmConfigureDebugger(ctx context.Context, req *mcp.CallToolRequest, in vmConfigureDebuggerInput) (*mcp.CallToolResult, noOut, error) {
+	if in.VM == "" {
+		return errResult("`vm` is required"), noOut{}, nil
+	}
+	cfg := parallels.VMDebugConfig{
+		Enabled:   in.Enable,
+		LocalAddr: in.LocalAddr,
+	}
+	switch strings.ToLower(in.Protocol) {
+	case "", "gdb":
+		cfg.Protocol = parallels.DebugProtocolGDB
+	case "kdbg", "windbg":
+		cfg.Protocol = parallels.DebugProtocolKDBG
+	default:
+		return errResult("protocol must be 'gdb' or 'kdbg'"), noOut{}, nil
+	}
+	if err := t.cli.ConfigureDebugger(ctx, in.VM, cfg); err != nil {
+		return fail("configure debugger", err), noOut{}, nil
+	}
+	if !in.Enable {
+		return textResult(fmt.Sprintf("✅ Guest debugger **disabled** for **%s**.", in.VM)), noOut{}, nil
+	}
+	addr := in.LocalAddr
+	if addr == "" {
+		addr = "127.0.0.1"
+	}
+	proto := "GDB"
+	if cfg.Protocol == parallels.DebugProtocolKDBG {
+		proto = "KDBG / WinDbg"
+	}
+	msg := fmt.Sprintf(
+		"✅ Guest debugger **enabled** for **%s**.\n\n"+
+			"- **Protocol:** %s\n"+
+			"- **Host bind addr:** `%s`\n\n"+
+			"Start the VM, then call `vm_guest_debugger` to obtain the connect address and port.\n\n"+
+			"**GDB connect example:**\n"+
+			"```\ngdb vmlinux\n(gdb) target remote %s:<port>\n```\n\n"+
+			"**WinDbg connect example:**\n"+
+			"```\nwindbg -k net:port=<port>,target=%s\n```",
+		in.VM, proto, addr, addr, addr,
+	)
+	return textResult(msg), noOut{}, nil
+}
+
+// ── vm_guest_debugger ────────────────────────────────────────────────────────
+
+type vmGuestDebuggerInput struct {
+	VM   string `json:"vm" jsonschema:"VM name or UUID (must be running with debugger enabled)"`
+	Port int    `json:"port,omitempty" jsonschema:"TCP port to use (0 = let Parallels choose)"`
+}
+
+func (t *Tools) vmGuestDebugger(ctx context.Context, req *mcp.CallToolRequest, in vmGuestDebuggerInput) (*mcp.CallToolResult, noOut, error) {
+	if in.VM == "" {
+		return errResult("`vm` is required"), noOut{}, nil
+	}
+	out, err := t.cli.GuestDebugger(ctx, in.VM, parallels.GuestDebuggerParams{Port: in.Port})
+	if err != nil {
+		return fail("guest-debugger", err), noOut{}, nil
+	}
+	return textResult(fmt.Sprintf("## Guest Debugger: %s\n\n```\n%s\n```", in.VM, strings.TrimSpace(out))), noOut{}, nil
 }
